@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\AI_Video_ToolKit.UI.csproj": {}
+  },
+  "projects": {
+    "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\AI_Video_ToolKit.UI.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\AI_Video_ToolKit.UI.csproj",
+        "projectName": "AI_Video_ToolKit.UI",
+        "projectPath": "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\AI_Video_ToolKit.UI.csproj",
+        "packagesPath": "C:\\Users\\name\\.nuget\\packages\\",
+        "outputPath": "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\name\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WPF": {
+              "privateAssets": "none"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Users\\name\\AppData\\Local\\Microsoft\\dotnet\\sdk\\8.0.420/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
