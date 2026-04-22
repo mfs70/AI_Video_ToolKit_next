@@ -6,39 +6,22 @@
         Width="1200"
         Background="#202020">
 
-    <!--
-    ============================================================
-    GRID — основная система layout
-    ============================================================
-    -->
-
     <Grid>
-
-        <!-- Определяем строки -->
         <Grid.RowDefinitions>
             <RowDefinition Height="80"/>
-            <!-- Top -->
             <RowDefinition Height="*"/>
-            <!-- Main -->
             <RowDefinition Height="30"/>
-            <!-- Status -->
         </Grid.RowDefinitions>
 
-        <!-- Определяем колонки -->
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="250"/>
-            <!-- Left panel -->
             <ColumnDefinition Width="*"/>
-            <!-- Main area -->
         </Grid.ColumnDefinitions>
 
-        <!-- ===================================================== -->
-        <!-- TOP PANEL -->
-        <!-- ===================================================== -->
+        <!-- TOP -->
         <Grid Grid.Row="0"
-                Grid.ColumnSpan="2"
-                Background="#2D2D30">
-
+              Grid.ColumnSpan="2"
+              Background="#2D2D30">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="120"/>
@@ -46,68 +29,48 @@
                 <ColumnDefinition Width="120"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Input -->
             <TextBox x:Name="InputPathBox"
                      Margin="10"
-                     VerticalAlignment="Center"
-                     FontSize="14"/>
-
+                     VerticalAlignment="Center"/>
             <Button Grid.Column="1"
                     Content="Browse"
-                    Margin="5"
                     Click="BrowseInput_Click"/>
 
-            <!-- Output -->
             <TextBox Grid.Column="2"
                      x:Name="OutputPathBox"
                      Margin="10"
-                     VerticalAlignment="Center"
-                     FontSize="14"/>
-
+                     VerticalAlignment="Center"/>
             <Button Grid.Column="3"
                     Content="Browse"
-                    Margin="5"
                     Click="BrowseOutput_Click"/>
-
         </Grid>
 
-        <!-- ===================================================== -->
-        <!-- LEFT PANEL -->
-        <!-- ===================================================== -->
+        <!-- LEFT -->
         <StackPanel Grid.Row="1"
-                Grid.Column="0"
-                    Background="#252526"
-                    Margin="5">
-
+                    Grid.Column="0"
+                    Background="#252526">
             <Button Content="Probe"
                     Height="50"
                     Margin="10"
                     Click="Probe_Click"/>
-
             <Button Content="Preview"
                     Height="50"
                     Margin="10"
                     Click="Preview_Click"/>
-
             <Button Content="Encode"
                     Height="50"
                     Margin="10"
                     Click="Encode_Click"/>
-
         </StackPanel>
 
-        <!-- ===================================================== -->
-        <!-- MAIN RIGHT PANEL -->
-        <!-- ===================================================== -->
+        <!-- RIGHT -->
         <Grid Grid.Row="1"
-                Grid.Column="1">
-
+              Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="250"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Media Info -->
             <TextBox x:Name="MediaInfoBox"
                      Grid.Row="0"
                      Margin="10"
@@ -117,7 +80,6 @@
                      IsReadOnly="True"
                      TextWrapping="Wrap"/>
 
-            <!-- Log -->
             <TextBox x:Name="LogBox"
                      Grid.Row="1"
                      Margin="10"
@@ -126,18 +88,14 @@
                      FontFamily="Consolas"
                      IsReadOnly="True"
                      VerticalScrollBarVisibility="Auto"/>
-
         </Grid>
 
-        <!-- ===================================================== -->
-        <!-- STATUS BAR -->
-        <!-- ===================================================== -->
+        <!-- STATUS -->
         <TextBlock Grid.Row="2"
-                Grid.ColumnSpan="2"
+                   Grid.ColumnSpan="2"
                    x:Name="StatusText"
                    Text="Ready"
                    Margin="10"
                    Foreground="White"/>
-
     </Grid>
 </Window>

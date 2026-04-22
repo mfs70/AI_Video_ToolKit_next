@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AI_Video_ToolKit.UI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+02b196777ceac60e76b7f94573f5ce88ea6d2bae")]
 [assembly: System.Reflection.AssemblyProductAttribute("AI_Video_ToolKit.UI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AI_Video_ToolKit.UI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
