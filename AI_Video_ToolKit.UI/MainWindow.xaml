@@ -4,14 +4,12 @@
         Title="AI Video Toolkit"
         Height="800" Width="1200"
         Background="#202020"
-
         AllowDrop="True"
         Drop="Window_Drop"
         DragOver="Window_DragOver">
 
     <Grid>
 
-        <!-- ROWS -->
         <Grid.RowDefinitions>
             <RowDefinition Height="45"/>
             <RowDefinition Height="*"/>
@@ -20,7 +18,6 @@
 
         <!-- HEADER -->
         <Grid Grid.Row="0" Background="#2D2D30">
-
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="80"/>
@@ -28,34 +25,15 @@
                 <ColumnDefinition Width="80"/>
             </Grid.ColumnDefinitions>
 
-            <TextBox x:Name="InputPathBox"
-                     Height="30"
-                     Margin="5"
-                     VerticalContentAlignment="Center"/>
+            <TextBox x:Name="InputPathBox" Height="30" Margin="5"/>
+            <Button Grid.Column="1" Content="..." Height="30" Margin="5" Click="BrowseInput_Click"/>
 
-            <Button Grid.Column="1"
-                    Content="..."
-                    Height="30"
-                    Margin="5"
-                    Click="BrowseInput_Click"/>
-
-            <TextBox Grid.Column="2"
-                     x:Name="OutputPathBox"
-                     Height="30"
-                     Margin="5"
-                     VerticalContentAlignment="Center"/>
-
-            <Button Grid.Column="3"
-                    Content="..."
-                    Height="30"
-                    Margin="5"
-                    Click="BrowseOutput_Click"/>
-
+            <TextBox Grid.Column="2" x:Name="OutputPathBox" Height="30" Margin="5"/>
+            <Button Grid.Column="3" Content="..." Height="30" Margin="5" Click="BrowseOutput_Click"/>
         </Grid>
 
         <!-- MAIN -->
         <TabControl Grid.Row="1">
-
             <TabItem Header="FFmpeg">
 
                 <Grid Margin="5">
@@ -70,25 +48,18 @@
                     <Grid Grid.Row="0">
 
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="280"/>
+                            <ColumnDefinition Width="350"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Margin="5">
+                        <!-- 🔥 LIST WITH INFO -->
+                        <ListBox x:Name="FileSelector"
+                                 SelectionChanged="FileSelector_Changed"
+                                 Background="#1E1E1E"
+                                 Foreground="White"/>
 
-                            <ComboBox x:Name="FileSelector"
-                                      Height="28"
-                                      SelectionChanged="FileSelector_Changed"/>
-
-                            <TextBlock x:Name="MediaInfoText"
-                                       Foreground="White"
-                                       Margin="5"
-                                       TextWrapping="Wrap"/>
-
-                        </StackPanel>
-
+                        <!-- PLAYER -->
                         <Grid Grid.Column="1">
-
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="45"/>
@@ -96,6 +67,7 @@
 
                             <MediaElement x:Name="VideoPlayer"
                                           LoadedBehavior="Manual"
+                                          UnloadedBehavior="Manual"
                                           Stretch="Uniform"/>
 
                             <StackPanel Grid.Row="1"
@@ -109,38 +81,23 @@
                                 <Button Content="⏭" Width="40" Margin="5" Click="Next_Click"/>
 
                             </StackPanel>
-
                         </Grid>
-
                     </Grid>
 
                     <!-- TIMELINE -->
-                    <ScrollViewer Grid.Row="1"
-                                  HorizontalScrollBarVisibility="Auto">
-
-                        <StackPanel x:Name="ImageTimeline"
-                                    Orientation="Horizontal"/>
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ImageTimeline" Orientation="Horizontal"/>
                     </ScrollViewer>
 
                     <!-- ACTIONS -->
                     <Grid Grid.Row="2">
-
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Content="Extract"
-                                Height="35"
-                                Margin="10"
-                                Click="ExtractFrames_Click"/>
-
-                        <Button Grid.Column="1"
-                                Content="Build"
-                                Height="35"
-                                Margin="10"
-                                Click="BuildVideo_Click"/>
-
+                        <Button Content="Extract" Margin="10" Click="ExtractFrames_Click"/>
+                        <Button Grid.Column="1" Content="Build" Margin="10" Click="BuildVideo_Click"/>
                     </Grid>
 
                 </Grid>
@@ -149,10 +106,8 @@
 
             <TabItem Header="Real-ESRGAN"/>
             <TabItem Header="RIFE"/>
-
         </TabControl>
 
-        <!-- STATUS -->
         <StatusBar Grid.Row="2">
             <TextBlock x:Name="StatusText" Text="Ready"/>
         </StatusBar>
