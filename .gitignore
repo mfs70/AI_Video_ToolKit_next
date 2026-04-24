@@ -1,3 +1,7 @@
+AI_Video_ToolKit.UI/bin/
+AI_Video_ToolKit.UI/obj/
+install/
+
 # =========================
 # BUILD
 # =========================
@@ -41,9 +45,9 @@ Thumbs.db
 # =========================
 # MEDIA (если большие файлы)
 # =========================
-*.mp4
-*.mkv
-*.avi
+# *.mp4
+# *.mkv
+# *.avi
 
 # =========================
 # NUGET
@@ -61,9 +65,3 @@ TestResults/
 # =========================
 *.runtimeconfig.json
 *.deps.json
-
-
-AI_Video_ToolKit.UI/bin/
-AI_Video_ToolKit.UI/obj/
-.vscode/
-install/
