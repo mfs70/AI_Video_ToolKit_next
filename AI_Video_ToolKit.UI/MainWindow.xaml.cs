@@ -1,30 +1,48 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
+using AI_Video_ToolKit.UI.Services;
 
 namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
+        private FFmpegService _ffmpeg = new FFmpegService();
+        private DispatcherTimer _timer = new DispatcherTimer();
+
+        // ✅ ВАЖНО: длительность
+        private TimeSpan _totalDuration = TimeSpan.Zero;
+
         public MainWindow()
         {
             InitializeComponent();
+
+            _timer.Interval = TimeSpan.FromMilliseconds(500);
+            _timer.Tick += UpdateTimeline;
+
+            _ffmpeg.OnOutput += (text) =>
+                Dispatcher.Invoke(() => Log(text));
+
+            _ffmpeg.OnError += (text) =>
+                Dispatcher.Invoke(() =>
+                {
+                    Log(text);
+                    ParseFFmpegProgress(text);
+                });
         }
 
-        // =====================================================
-        // LOG
-        // =====================================================
-        private void Log(string message)
+        // ================= LOG =================
+        private void Log(string msg)
         {
-            LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\n");
+            LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
             LogBox.ScrollToEnd();
         }
 
-        // =====================================================
-        // INPUT FILE
-        // =====================================================
+        // ================= INPUT =================
+
         private void BrowseInput_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new Microsoft.Win32.OpenFileDialog();
@@ -36,155 +54,197 @@ namespace AI_Video_ToolKit.UI
             }
         }
 
-        // =====================================================
-        // OUTPUT FOLDER (ЧИСТЫЙ WPF через Windows API)
-        // =====================================================
         private void BrowseOutput_Click(object sender, RoutedEventArgs e)
         {
-            var path = FolderPicker();
-
-            if (!string.IsNullOrEmpty(path))
+            var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                OutputPathBox.Text = path;
-                Log("Output selected");
+                Title = "Select output folder",
+                FileName = "Select Folder",
+                Filter = "Folder|*.folder"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                string? path = Path.GetDirectoryName(dialog.FileName);
+
+                if (!string.IsNullOrEmpty(path))
+                {
+                    OutputPathBox.Text = path;
+                    Log("Output selected");
+                }
             }
         }
 
-        // =====================================================
-        // FFPROBE
-        // =====================================================
-        private void Probe_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string ffprobe = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
+        // ================= VIDEO =================
 
-                var process = new Process();
-                process.StartInfo.FileName = ffprobe;
-                process.StartInfo.Arguments =
-                    $"-v quiet -print_format json -show_format -show_streams \"{InputPathBox.Text}\"";
-
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.UseShellExecute = false;
-
-                process.Start();
-
-                string output = process.StandardOutput.ReadToEnd();
-                process.WaitForExit();
-
-                MediaInfoBox.Text = output;
-
-                Log("FFprobe done");
-            }
-            catch (Exception ex)
-            {
-                Log("ERROR: " + ex.Message);
-            }
-        }
-
-        // =====================================================
-        // PREVIEW
-        // =====================================================
         private void Preview_Click(object sender, RoutedEventArgs e)
         {
-            string ffplay = @"C:\_Portable_\ffmpeg\bin\ffplay.exe";
-
-            Process.Start(ffplay, $"\"{InputPathBox.Text}\"");
-
-            Log("Preview started");
+            Play_Click(sender, e);
         }
 
-        // =====================================================
-        // ENCODE
-        // =====================================================
-        private void Encode_Click(object sender, RoutedEventArgs e)
+        private void Play_Click(object sender, RoutedEventArgs e)
         {
-            string ffmpeg = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
-
-            string output = Path.Combine(OutputPathBox.Text, "output.mp4");
-
-            Process.Start(ffmpeg,
-                $"-y -i \"{InputPathBox.Text}\" -c:v libx264 \"{output}\"");
-
-            Log("Encoding started");
-        }
-
-        // =====================================================
-        // CLEAN WPF FOLDER PICKER (NO WINFORMS)
-        // =====================================================
-        private string FolderPicker()
-        {
-            var dialog = (IFileDialog)new FileOpenDialog();
-
-            dialog.SetOptions(FOS.FOS_PICKFOLDERS | FOS.FOS_FORCEFILESYSTEM);
-
-            if (dialog.Show(IntPtr.Zero) == 0)
+            if (!File.Exists(InputPathBox.Text))
             {
-                dialog.GetResult(out IShellItem item);
-                item.GetDisplayName(SIGDN.SIGDN_FILESYSPATH, out IntPtr pathPtr);
-
-                string path = Marshal.PtrToStringAuto(pathPtr);
-                Marshal.FreeCoTaskMem(pathPtr);
-
-                return path;
+                Log("File not found");
+                return;
             }
 
-            return null;
+            VideoPlayer.Source = new Uri(InputPathBox.Text);
+            VideoPlayer.Play();
+            _timer.Start();
         }
 
-        // =====================================================
-        // WINDOWS API (COM)
-        // =====================================================
-
-        [ComImport]
-        [Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
-        private class FileOpenDialog { }
-
-        [ComImport]
-        [Guid("42F85136-DB7E-439C-85F1-E4075D135FC8")]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IFileDialog
+        private void Pause_Click(object sender, RoutedEventArgs e)
         {
-            [PreserveSig] int Show(IntPtr parent);
-            void SetFileTypes();
-            void SetFileTypeIndex();
-            void GetFileTypeIndex();
-            void Advise();
-            void Unadvise();
-            void SetOptions(FOS fos);
-            void GetOptions();
-            void SetDefaultFolder();
-            void SetFolder();
-            void GetFolder();
-            void GetCurrentSelection();
-            void SetFileName();
-            void GetFileName();
-            void SetTitle();
-            void SetOkButtonLabel();
-            void SetFileNameLabel();
-            void GetResult(out IShellItem item);
+            VideoPlayer.Pause();
         }
 
-        [ComImport]
-        [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
-        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        private interface IShellItem
+        private void Stop_Click(object sender, RoutedEventArgs e)
         {
-            void BindToHandler();
-            void GetParent();
-            void GetDisplayName(SIGDN sigdnName, out IntPtr ppszName);
+            VideoPlayer.Stop();
+            _timer.Stop();
         }
 
-        private enum SIGDN : uint
+        private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
         {
-            SIGDN_FILESYSPATH = 0x80058000
+            if (VideoPlayer.NaturalDuration.HasTimeSpan)
+            {
+                TimelineSlider.Maximum =
+                    VideoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+            }
         }
 
-        [Flags]
-        private enum FOS : uint
+        private void UpdateTimeline(object? sender, EventArgs e)
         {
-            FOS_PICKFOLDERS = 0x00000020,
-            FOS_FORCEFILESYSTEM = 0x00000040
+            if (VideoPlayer.NaturalDuration.HasTimeSpan)
+            {
+                TimelineSlider.Value = VideoPlayer.Position.TotalSeconds;
+
+                TimeText.Text =
+                    $"{VideoPlayer.Position:mm\\:ss} / {VideoPlayer.NaturalDuration.TimeSpan:mm\\:ss}";
+            }
+        }
+
+        private void TimelineSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Math.Abs(VideoPlayer.Position.TotalSeconds - e.NewValue) > 1)
+            {
+                VideoPlayer.Position = TimeSpan.FromSeconds(e.NewValue);
+            }
+        }
+
+        // ================= PROBE =================
+
+        private async void Probe_Click(object sender, RoutedEventArgs e)
+        {
+            string input = InputPathBox.Text;
+
+            if (!File.Exists(input))
+            {
+                Log("File not found");
+                return;
+            }
+
+            string ffprobe = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
+
+            string args =
+                $"-v quiet -print_format json -show_format -show_streams \"{input}\"";
+
+            await _ffmpeg.RunProcessAsync(ffprobe, args);
+        }
+
+        // ================= GET DURATION =================
+
+        private async Task GetDurationAsync(string inputFile)
+        {
+            string ffprobe = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
+
+            var process = new Process();
+            process.StartInfo.FileName = ffprobe;
+            process.StartInfo.Arguments =
+                $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{inputFile}\"";
+
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.UseShellExecute = false;
+
+            process.Start();
+
+            string output = await process.StandardOutput.ReadToEndAsync();
+            process.WaitForExit();
+
+            if (double.TryParse(output, System.Globalization.CultureInfo.InvariantCulture, out double seconds))
+            {
+                _totalDuration = TimeSpan.FromSeconds(seconds);
+            }
+        }
+
+        // ================= ENCODE =================
+
+        private async void Encode_Click(object sender, RoutedEventArgs e)
+        {
+            string input = InputPathBox.Text;
+
+            if (!File.Exists(input))
+            {
+                Log("Input file not found");
+                return;
+            }
+
+            string outputDir = OutputPathBox.Text;
+
+            if (!Directory.Exists(outputDir))
+            {
+                Log("Output folder invalid");
+                return;
+            }
+
+            string fileName = Path.GetFileNameWithoutExtension(input);
+
+            string outputFile = Path.Combine(
+                outputDir,
+                $"{fileName}_encoded_{DateTime.Now:HHmmss}.mp4"
+            );
+
+            ProgressBar.Value = 0;
+
+            Log("Getting duration...");
+            await GetDurationAsync(input);
+
+            Log($"Duration: {_totalDuration}");
+
+            string ffmpeg = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+
+            string args =
+                $"-y -i \"{input}\" -c:v libx264 \"{outputFile}\"";
+
+            Log("Encoding started");
+
+            await _ffmpeg.RunProcessAsync(ffmpeg, args);
+
+            ProgressBar.Value = 100;
+            StatusText.Text = "Done";
+        }
+
+        // ================= PROGRESS =================
+
+        private void ParseFFmpegProgress(string line)
+        {
+            if (!line.Contains("time=")) return;
+
+            try
+            {
+                var t = line.Split("time=")[1].Split(' ')[0];
+
+                if (TimeSpan.TryParse(t, out var current) && _totalDuration.TotalSeconds > 0)
+                {
+                    double p = current.TotalSeconds / _totalDuration.TotalSeconds * 100;
+
+                    ProgressBar.Value = p;
+                    StatusText.Text = $"Encoding... {p:F1}%";
+                }
+            }
+            catch { }
         }
     }
 }

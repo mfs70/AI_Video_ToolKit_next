@@ -1,0 +1,9 @@
+PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet run
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(7,27): error CS0234: Тип или имя пространства имен "Services" не существ
+ует в пространстве имен "AI_Video_ToolKit.UI" (возможно, отсутствует ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI
+_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(16,17): error CS0246: Не удалось найти тип или имя пространства имен "FF 
+mpegService" (возможно, отсутствует директива using или ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKi 
+t.UI.csproj]
+
+Ошибка сборки. Устраните ошибки сборки и повторите попытку.

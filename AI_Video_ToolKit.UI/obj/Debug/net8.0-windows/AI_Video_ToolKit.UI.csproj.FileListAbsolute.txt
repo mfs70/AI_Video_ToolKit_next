@@ -1,3 +1,5 @@
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\App.g.cs
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\AI_Video_ToolKit.UI_MarkupCompile.cache
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_ToolKit.UI.exe
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_ToolKit.UI.deps.json
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_ToolKit.UI.runtimeconfig.json
@@ -5,8 +7,6 @@ D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_T
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_ToolKit.UI.pdb
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\MainWindow.baml
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\MainWindow.g.cs
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\App.g.cs
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\AI_Video_ToolKit.UI_MarkupCompile.cache
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\AI_Video_ToolKit.UI.g.resources
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\AI_Video_ToolKit.UI.GeneratedMSBuildEditorConfig.editorconfig
 D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\obj\Debug\net8.0-windows\AI_Video_ToolKit.UI.AssemblyInfoInputs.cache

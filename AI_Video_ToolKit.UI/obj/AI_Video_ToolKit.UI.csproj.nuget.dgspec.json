@@ -10,18 +10,15 @@
         "projectUniqueName": "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\AI_Video_ToolKit.UI.csproj",
         "projectName": "AI_Video_ToolKit.UI",
         "projectPath": "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\AI_Video_ToolKit.UI.csproj",
-        "packagesPath": "C:\\Users\\name\\.nuget\\packages\\",
+        "packagesPath": "C:\\Users\\fmeshkov\\.nuget\\packages\\",
         "outputPath": "D:\\AI_Video_ToolKit_next\\AI_Video_ToolKit.UI\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\name\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\fmeshkov\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0-windows"
         ],
-        "sources": {
-          "https://api.nuget.org/v3/index.json": {}
-        },
         "frameworks": {
           "net8.0-windows7.0": {
             "targetAlias": "net8.0-windows",
