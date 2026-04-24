@@ -1,250 +1,190 @@
 using System;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
+using System.Linq;
 using System.Windows;
-using System.Windows.Threading;
-using AI_Video_ToolKit.UI.Services;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 
 namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
-        private FFmpegService _ffmpeg = new FFmpegService();
-        private DispatcherTimer _timer = new DispatcherTimer();
+        private List<string> _files = new List<string>();
 
-        // ✅ ВАЖНО: длительность
-        private TimeSpan _totalDuration = TimeSpan.Zero;
+        private string _inputDir = "";
+        private string _outputDir = "";
+
+        private int _currentIndex = 0;
 
         public MainWindow()
         {
             InitializeComponent();
-
-            _timer.Interval = TimeSpan.FromMilliseconds(500);
-            _timer.Tick += UpdateTimeline;
-
-            _ffmpeg.OnOutput += (text) =>
-                Dispatcher.Invoke(() => Log(text));
-
-            _ffmpeg.OnError += (text) =>
-                Dispatcher.Invoke(() =>
-                {
-                    Log(text);
-                    ParseFFmpegProgress(text);
-                });
+            InitEnvironment();
         }
 
-        // ================= LOG =================
-        private void Log(string msg)
+        // ================= INIT =================
+        private void InitEnvironment()
         {
-            LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\n");
-            LogBox.ScrollToEnd();
+            string root = AppDomain.CurrentDomain.BaseDirectory;
+
+            _inputDir = Path.Combine(root, "input");
+            _outputDir = Path.Combine(root, "output");
+
+            Directory.CreateDirectory(_inputDir);
+            Directory.CreateDirectory(_outputDir);
+
+            InputPathBox.Text = _inputDir;
+            OutputPathBox.Text = _outputDir;
         }
 
         // ================= INPUT =================
-
         private void BrowseInput_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog();
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select files",
+                Multiselect = true
+            };
 
             if (dialog.ShowDialog() == true)
             {
-                InputPathBox.Text = dialog.FileName;
-                Log("Input selected");
+                _files.Clear();
+                FileSelector.Items.Clear();
+                ImageTimeline.Children.Clear();
+
+                // 🔥 используем именно выбранные файлы
+                foreach (var file in dialog.FileNames)
+                {
+                    if (!IsVideo(file) && !IsImage(file))
+                        continue;
+
+                    _files.Add(file);
+                    FileSelector.Items.Add(Path.GetFileName(file));
+
+                    if (IsImage(file))
+                        AddImage(file);
+                }
+
+                // 👉 показываем путь выбранного файла (или первого)
+                InputPathBox.Text = dialog.FileNames.First();
+
+                if (_files.Count > 0)
+                {
+                    _currentIndex = 0;
+                    FileSelector.SelectedIndex = 0;
+                }
+
+                StatusText.Text = $"Loaded {_files.Count} files";
             }
         }
 
+        // ================= OUTPUT =================
         private void BrowseOutput_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
                 Title = "Select output folder",
-                FileName = "Select Folder",
-                Filter = "Folder|*.folder"
+                FileName = "Select Folder"
             };
 
             if (dialog.ShowDialog() == true)
             {
-                string? path = Path.GetDirectoryName(dialog.FileName);
+                string path = Path.GetDirectoryName(dialog.FileName) ?? "";
 
                 if (!string.IsNullOrEmpty(path))
                 {
                     OutputPathBox.Text = path;
-                    Log("Output selected");
+                    StatusText.Text = "Output selected";
                 }
             }
         }
 
-        // ================= VIDEO =================
-
-        private void Preview_Click(object sender, RoutedEventArgs e)
+        // ================= PLAYER =================
+        private void FileSelector_Changed(object sender, SelectionChangedEventArgs e)
         {
-            Play_Click(sender, e);
+            _currentIndex = FileSelector.SelectedIndex;
+            PlayCurrent();
         }
 
-        private void Play_Click(object sender, RoutedEventArgs e)
+        private void PlayCurrent()
         {
-            if (!File.Exists(InputPathBox.Text))
-            {
-                Log("File not found");
+            if (_currentIndex < 0 || _currentIndex >= _files.Count)
                 return;
-            }
 
-            VideoPlayer.Source = new Uri(InputPathBox.Text);
-            VideoPlayer.Play();
-            _timer.Start();
-        }
+            string file = _files[_currentIndex];
 
-        private void Pause_Click(object sender, RoutedEventArgs e)
-        {
-            VideoPlayer.Pause();
-        }
-
-        private void Stop_Click(object sender, RoutedEventArgs e)
-        {
-            VideoPlayer.Stop();
-            _timer.Stop();
-        }
-
-        private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
-        {
-            if (VideoPlayer.NaturalDuration.HasTimeSpan)
+            if (IsVideo(file))
             {
-                TimelineSlider.Maximum =
-                    VideoPlayer.NaturalDuration.TimeSpan.TotalSeconds;
+                VideoPlayer.Source = new Uri(file);
+                VideoPlayer.Play();
             }
         }
 
-        private void UpdateTimeline(object? sender, EventArgs e)
-        {
-            if (VideoPlayer.NaturalDuration.HasTimeSpan)
-            {
-                TimelineSlider.Value = VideoPlayer.Position.TotalSeconds;
+        private void Play_Click(object sender, RoutedEventArgs e) => VideoPlayer.Play();
+        private void Pause_Click(object sender, RoutedEventArgs e) => VideoPlayer.Pause();
+        private void Stop_Click(object sender, RoutedEventArgs e) => VideoPlayer.Stop();
 
-                TimeText.Text =
-                    $"{VideoPlayer.Position:mm\\:ss} / {VideoPlayer.NaturalDuration.TimeSpan:mm\\:ss}";
+        private void Prev_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentIndex > 0)
+            {
+                _currentIndex--;
+                FileSelector.SelectedIndex = _currentIndex;
             }
         }
 
-        private void TimelineSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void Next_Click(object sender, RoutedEventArgs e)
         {
-            if (Math.Abs(VideoPlayer.Position.TotalSeconds - e.NewValue) > 1)
+            if (_currentIndex < _files.Count - 1)
             {
-                VideoPlayer.Position = TimeSpan.FromSeconds(e.NewValue);
+                _currentIndex++;
+                FileSelector.SelectedIndex = _currentIndex;
             }
         }
 
-        // ================= PROBE =================
-
-        private async void Probe_Click(object sender, RoutedEventArgs e)
+        // ================= TIMELINE =================
+        private void AddImage(string path)
         {
-            string input = InputPathBox.Text;
-
-            if (!File.Exists(input))
+            var img = new Image
             {
-                Log("File not found");
-                return;
-            }
+                Source = new BitmapImage(new Uri(path)),
+                Width = 90,
+                Margin = new Thickness(3)
+            };
 
-            string ffprobe = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
+            var btn = new Button { Content = img };
 
-            string args =
-                $"-v quiet -print_format json -show_format -show_streams \"{input}\"";
+            btn.Click += (s, e) =>
+            {
+                ImageTimeline.Children.Remove(btn);
+            };
 
-            await _ffmpeg.RunProcessAsync(ffprobe, args);
+            ImageTimeline.Children.Add(btn);
         }
 
-        // ================= GET DURATION =================
-
-        private async Task GetDurationAsync(string inputFile)
+        // ================= TYPES =================
+        private bool IsVideo(string f)
         {
-            string ffprobe = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
-
-            var process = new Process();
-            process.StartInfo.FileName = ffprobe;
-            process.StartInfo.Arguments =
-                $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{inputFile}\"";
-
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.UseShellExecute = false;
-
-            process.Start();
-
-            string output = await process.StandardOutput.ReadToEndAsync();
-            process.WaitForExit();
-
-            if (double.TryParse(output, System.Globalization.CultureInfo.InvariantCulture, out double seconds))
-            {
-                _totalDuration = TimeSpan.FromSeconds(seconds);
-            }
+            string ext = Path.GetExtension(f).ToLower();
+            return ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov";
         }
 
-        // ================= ENCODE =================
-
-        private async void Encode_Click(object sender, RoutedEventArgs e)
+        private bool IsImage(string f)
         {
-            string input = InputPathBox.Text;
-
-            if (!File.Exists(input))
-            {
-                Log("Input file not found");
-                return;
-            }
-
-            string outputDir = OutputPathBox.Text;
-
-            if (!Directory.Exists(outputDir))
-            {
-                Log("Output folder invalid");
-                return;
-            }
-
-            string fileName = Path.GetFileNameWithoutExtension(input);
-
-            string outputFile = Path.Combine(
-                outputDir,
-                $"{fileName}_encoded_{DateTime.Now:HHmmss}.mp4"
-            );
-
-            ProgressBar.Value = 0;
-
-            Log("Getting duration...");
-            await GetDurationAsync(input);
-
-            Log($"Duration: {_totalDuration}");
-
-            string ffmpeg = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
-
-            string args =
-                $"-y -i \"{input}\" -c:v libx264 \"{outputFile}\"";
-
-            Log("Encoding started");
-
-            await _ffmpeg.RunProcessAsync(ffmpeg, args);
-
-            ProgressBar.Value = 100;
-            StatusText.Text = "Done";
+            string ext = Path.GetExtension(f).ToLower();
+            return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp";
         }
 
-        // ================= PROGRESS =================
-
-        private void ParseFFmpegProgress(string line)
+        // ================= ACTIONS =================
+        private void ExtractFrames_Click(object sender, RoutedEventArgs e)
         {
-            if (!line.Contains("time=")) return;
+            StatusText.Text = "Extract...";
+        }
 
-            try
-            {
-                var t = line.Split("time=")[1].Split(' ')[0];
-
-                if (TimeSpan.TryParse(t, out var current) && _totalDuration.TotalSeconds > 0)
-                {
-                    double p = current.TotalSeconds / _totalDuration.TotalSeconds * 100;
-
-                    ProgressBar.Value = p;
-                    StatusText.Text = $"Encoding... {p:F1}%";
-                }
-            }
-            catch { }
+        private void BuildVideo_Click(object sender, RoutedEventArgs e)
+        {
+            StatusText.Text = "Build...";
         }
     }
 }

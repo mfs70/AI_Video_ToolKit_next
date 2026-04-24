@@ -6,7 +6,7 @@
 
 Всегда есть 3 состояния:
 
-```text
+```
 Рабочая папка (файлы на диске)
 → Git (локальная история)
 → GitHub (удалённый репозиторий)
@@ -14,34 +14,19 @@
 
 ---
 
-# 🚀 1. Клонирование репозитория (синхронизация старт)
+# 🚀 1. Клонирование репозитория
 
-## Через VSCode (рекомендуется)
+## VSCode
 
 1. `Ctrl + Shift + P`
-2. Ввести:
-
-```
-Git: Clone
-```
-
-3. Вставить URL:
-
-```
-https://github.com/USER/REPO.git
-```
-
-4. Выбрать папку (например):
-
-```
-D:\AI_Video_ToolKit_next
-```
-
-5. Открыть проект
+2. `Git: Clone`
+3. Вставить URL
+4. Выбрать папку
+5. Open
 
 ---
 
-## Через CLI
+## CLI
 
 ```bash
 git clone https://github.com/USER/REPO.git
@@ -51,90 +36,52 @@ code .
 
 ---
 
-# 🔄 2. Синхронизация локальной папки и GitHub
-
-## Основной цикл работы
+# 🔄 2. Синхронизация (основной цикл)
 
 ```bash
 git pull
-→ редактируешь файлы
+→ работаешь с файлами
 git add .
-git commit -m "описание изменений"
+git commit -m "описание"
 git push
 ```
 
 ---
 
-## В VSCode
+# ⚠️ Правило
 
-1. Source Control (`Ctrl + Shift + G`)
-2. Stage (кнопка `+`)
-3. Ввести сообщение
-4. Commit
-5. Sync / Push
-
----
-
-# ⚠️ КРИТИЧЕСКОЕ ПРАВИЛО
-
-```text
-ВСЕГДА → git pull перед началом работы
+```
+ВСЕГДА делай git pull перед началом работы
 ```
 
 ---
 
-# 📁 3. Перемещение проекта на другой диск/папку
+# 📁 3. Перемещение проекта
 
-## ❗ Можно переносить БЕЗ проблем
+Можно свободно переносить:
 
-Git хранит данные в:
-
-```text
-.git/
+```
+D:\AI_Video_ToolKit_next → H:\Projects\
 ```
 
----
+✔ всё работает
+✔ Git не ломается
 
-## Просто:
-
-```text
-Было:
-D:\AI_Video_ToolKit_next
-
-Стало:
-H:\Projects\AI_Video_ToolKit_next
-```
-
-👉 НИЧЕГО ломаться не будет
-
----
-
-## Проверка после переноса:
+Проверка:
 
 ```bash
 git status
-```
-
----
-
-## Проверка remote:
-
-```bash
 git remote -v
 ```
 
 ---
 
-# 🔗 4. Привязка папки к GitHub (если её не было)
-
-Если у тебя есть папка с проектом:
+# 🔗 4. Привязка проекта к GitHub
 
 ```bash
-cd AI_Video_ToolKit_next
-
 git init
 git add .
-git commit -m "initial commit"
+git commit -m "initial"
 git branch -M main
 git remote add origin https://github.com/USER/REPO.git
 git push -u origin main
@@ -144,118 +91,50 @@ git push -u origin main
 
 # 🔀 5. Объединение репозиториев
 
-## Сценарий:
-
-👉 есть 2 проекта → нужно объединить
-
----
-
-## Вариант 1 (простой — через копирование)
-
-1. Скопировать файлы в один репозиторий
-2. Выполнить:
+## Простой способ
 
 ```bash
 git add .
-git commit -m "merge projects"
+git commit -m "merge"
 git push
 ```
 
----
-
-## Вариант 2 (правильный — через remote)
+## Через remote
 
 ```bash
-git remote add other https://github.com/USER/OTHER_REPO.git
+git remote add other https://github.com/USER/OTHER.git
 git fetch other
 git merge other/main
 ```
 
 ---
 
-## ⚠️ Возможны конфликты
+# 🔄 6. Перенос на другой компьютер
 
-Git покажет:
-
-```text
-CONFLICT
-```
-
-👉 нужно вручную исправить файлы
-
----
-
-# 🔄 6. Перенос проекта на другой компьютер
-
----
-
-## Вариант A (правильный)
-
-На новом ПК:
+## Лучший способ
 
 ```bash
 git clone https://github.com/USER/REPO.git
 ```
 
----
+## Альтернатива
 
-## Вариант B (через флешку)
-
-1. Скопировать папку (вместе с `.git`)
-2. Вставить на новый ПК
-
-Проверка:
-
-```bash
-git status
-```
+Скопировать папку вместе с `.git`
 
 ---
 
-## ⚠️ Если потерялся remote
-
-```bash
-git remote add origin https://github.com/USER/REPO.git
-```
-
----
-
-# 🔁 7. Работа с ветками (рекомендуется)
-
-Создание ветки:
+# 🔁 7. Ветки
 
 ```bash
 git checkout -b feature/timeline
-```
-
-Отправка:
-
-```bash
 git push origin feature/timeline
-```
-
----
-
-# 🧠 Почему это важно
-
-```text
-main → стабильная версия
-feature → разработка
 ```
 
 ---
 
 # ⚠️ 8. Частые ошибки
 
----
-
 ## ❌ Забыл pull
-
-```text
-→ конфликт при push
-```
-
-Решение:
 
 ```bash
 git pull --rebase
@@ -263,29 +142,79 @@ git pull --rebase
 
 ---
 
-## ❌ Коммит бинарников
+## ❌ Коммит мусора
 
-```text
-→ репозиторий раздувается
-```
-
-Решение:
-
-`.gitignore`
+→ использовать `.gitignore`
 
 ---
 
-## ❌ Потеря .git папки
+# ❗ 9. ВАЖНО: почему .gitignore “не работает”
 
-```text
-→ проект "забывает" историю
+## Причина
+
+```
+.gitignore НЕ удаляет уже добавленные файлы
 ```
 
 ---
 
-# 📦 9. Что НЕ должно попадать в Git
+## Симптом
 
-```text
+В репозиторий попадают:
+
+```
+bin/
+obj/
+```
+
+---
+
+## 🔥 РЕШЕНИЕ (обязательно)
+
+Удаляем из Git, но НЕ с диска:
+
+```bash
+git rm -r --cached **/bin
+git rm -r --cached **/obj
+```
+
+---
+
+## Затем:
+
+```bash
+git commit -m "Remove build folders from repo"
+git push
+```
+
+---
+
+## ✅ Правильный .gitignore
+
+```gitignore
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.log
+```
+
+---
+
+## 🧪 Проверка
+
+```bash
+git status
+```
+
+👉 папки больше не отслеживаются
+
+---
+
+# 📦 10. Что нельзя коммитить
+
+```
 C:\_Portable_
 bin/
 obj/
@@ -295,14 +224,14 @@ obj/
 
 ---
 
-# 🧠 10. Рекомендуемый workflow
+# 🧠 11. Рекомендуемый workflow
 
-```text
-1. git pull
-2. работа
-3. git add .
-4. git commit
-5. git push
+```
+git pull
+→ работа
+git add .
+git commit
+git push
 ```
 
 ---
@@ -315,14 +244,14 @@ obj/
 ✔ синхронизировать
 ✔ переносить проект
 ✔ объединять репозитории
-✔ работать на разных ПК
+✔ исправлять .gitignore
 
 ---
 
 # 🚀 Следующий уровень
 
-* GitHub Actions (автосборка)
-* версии (releases)
 * CI/CD
+* версии (releases)
+* командная разработка
 
 ---
