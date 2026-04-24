@@ -1,29 +1,48 @@
 PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet build
   Определение проектов для восстановления...
   Все проекты обновлены для восстановления.
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(18,16): warning CS8618: поле "_inputDir", не допускающий значения NULL, должен содержать
- значение, отличное от NULL, при выходе из конструктора. Рассмотрите возможность добавления модификатора "required" или объявления значения поле, допуск
-ающего значение NULL. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(18,16): warning CS8618: поле "_outputDir", не допускающий значения NULL, должен содержат 
-ь значение, отличное от NULL, при выходе из конструктора. Рассмотрите возможность добавления модификатора "required" или объявления значения поле, допус 
-кающего значение NULL. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(49,33): warning CS8600: Преобразование литерала, допускающего значение NULL или возможно 
-го значения NULL в тип, не допускающий значение NULL. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(51,28): warning CS8604: Возможно, аргумент-ссылка, допускающий значение NULL, для параме 
-тра "folder" в "void MainWindow.LoadFolder(string folder)". [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-  AI_Video_ToolKit.UI -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_ToolKit.UI.dll
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(162,31): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(162,31): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(164,48): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(164,48): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(165,57): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(165,57): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(167,32): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(9,105): error CS1061: "MainWindow" не содержит определения "Window_Drop", и не удалось найт 
+и доступный метод расширения "Window_Drop", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка на 
+ сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(10,109): error CS1061: "MainWindow" не содержит определения "Window_DragOver", и не удалось 
+ найти доступный метод расширения "Window_DragOver", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или  
+ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
 
-Сборка успешно завершена.
+Ошибка сборки.
 
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(18,16): warning CS8618: поле "_inputDir", не допускающий значения NULL, должен содержать 
- значение, отличное от NULL, при выходе из конструктора. Рассмотрите возможность добавления модификатора "required" или объявления значения поле, допуск 
-ающего значение NULL. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(18,16): warning CS8618: поле "_outputDir", не допускающий значения NULL, должен содержат 
-ь значение, отличное от NULL, при выходе из конструктора. Рассмотрите возможность добавления модификатора "required" или объявления значения поле, допус 
-кающего значение NULL. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(49,33): warning CS8600: Преобразование литерала, допускающего значение NULL или возможно 
-го значения NULL в тип, не допускающий значение NULL. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(51,28): warning CS8604: Возможно, аргумент-ссылка, допускающий значение NULL, для параме 
-тра "folder" в "void MainWindow.LoadFolder(string folder)". [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-    Предупреждений: 4
-    Ошибок: 0
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(162,31): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(162,31): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(164,48): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(164,48): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(165,57): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(165,57): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(167,32): warning CS8602: Разыменование вероятной пустой ссылки. [D:\AI_Video_ToolKit_nex 
+t\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(9,105): error CS1061: "MainWindow" не содержит определения "Window_Drop", и не удалось найт 
+и доступный метод расширения "Window_Drop", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка на 
+ сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(10,109): error CS1061: "MainWindow" не содержит определения "Window_DragOver", и не удалось 
+ найти доступный метод расширения "Window_DragOver", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или  
+ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+    Предупреждений: 7
+    Ошибок: 2

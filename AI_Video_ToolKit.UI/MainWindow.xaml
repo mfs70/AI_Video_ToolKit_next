@@ -3,7 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AI Video Toolkit"
         Height="800" Width="1200"
-        Background="#202020">
+        Background="#202020"
+
+        AllowDrop="True"
+        Drop="Window_Drop"
+        DragOver="Window_DragOver">
 
     <Grid>
 
@@ -14,7 +18,7 @@
             <RowDefinition Height="25"/>
         </Grid.RowDefinitions>
 
-        <!-- ================= HEADER ================= -->
+        <!-- HEADER -->
         <Grid Grid.Row="0" Background="#2D2D30">
 
             <Grid.ColumnDefinitions>
@@ -49,7 +53,7 @@
 
         </Grid>
 
-        <!-- ================= MAIN ================= -->
+        <!-- MAIN -->
         <TabControl Grid.Row="1">
 
             <TabItem Header="FFmpeg">
@@ -70,7 +74,6 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- FILE LIST -->
                         <StackPanel Margin="5">
 
                             <ComboBox x:Name="FileSelector"
@@ -84,7 +87,6 @@
 
                         </StackPanel>
 
-                        <!-- PLAYER -->
                         <Grid Grid.Column="1">
 
                             <Grid.RowDefinitions>
@@ -96,11 +98,9 @@
                                           LoadedBehavior="Manual"
                                           Stretch="Uniform"/>
 
-                            <!-- CONTROLS -->
                             <StackPanel Grid.Row="1"
                                         Orientation="Horizontal"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center">
+                                        HorizontalAlignment="Center">
 
                                 <Button Content="⏮" Width="40" Margin="5" Click="Prev_Click"/>
                                 <Button Content="▶" Width="40" Margin="5" Click="Play_Click"/>
