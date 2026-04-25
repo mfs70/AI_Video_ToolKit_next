@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
@@ -12,24 +13,31 @@ namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
-        private List<string> _files = new List<string>();
-        private List<string> _displayList = new List<string>();
+        // ================= DATA =================
+        // Список файлов (полные пути)
+        private List<string> _files = new();
 
-        private Dictionary<string, string> _mediaInfo = new();
+        // Список строк для отображения в UI
+        private List<string> _display = new();
 
+        // Индекс текущего файла
         private int _currentIndex = 0;
+
+        // Пути к портативным инструментам
+        private string FFMPEG = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+        private string FFPROBE = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
 
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        // ================= LOAD =================
+        // ================= LOAD FILES =================
+        // Загружаем файлы/папки
         private void LoadFiles(IEnumerable<string> paths)
         {
             _files.Clear();
-            _displayList.Clear();
-            _mediaInfo.Clear();
+            _display.Clear();
 
             FileSelector.Items.Clear();
             ImageTimeline.Children.Clear();
@@ -47,35 +55,91 @@ namespace AI_Video_ToolKit.UI
                 }
             }
 
-            for (int i = 0; i < _files.Count; i++)
-                FileSelector.Items.Add(_displayList[i]);
+            // Обновляем UI список
+            foreach (var item in _display)
+                FileSelector.Items.Add(item);
 
             if (_files.Count > 0)
                 FileSelector.SelectedIndex = 0;
         }
 
+        // Добавление файла
         private void AddFile(string file)
         {
-            if (!IsVideo(file) && !IsImage(file)) return;
+            if (!IsVideo(file) && !IsImage(file))
+                return;
 
             _files.Add(file);
 
-            string info = "";
-
             if (IsVideo(file))
-                info = AnalyzeVideo(file);
+            {
+                string info = GetVideoInfo(file);
+                _display.Add($"{Path.GetFileName(file)} | {info}");
+            }
             else
-                info = "Image";
-
-            _mediaInfo[file] = info;
-
-            _displayList.Add($"{Path.GetFileName(file)}  |  {info}");
-
-            if (IsImage(file))
+            {
+                _display.Add($"{Path.GetFileName(file)} | image");
                 AddImage(file);
+            }
         }
 
-        // ================= PLAYER FIX =================
+        // ================= FFPROBE =================
+        // Получение параметров видео
+        private string GetVideoInfo(string file)
+        {
+            try
+            {
+                var p = new Process();
+
+                p.StartInfo.FileName = FFPROBE;
+                p.StartInfo.Arguments = $"-v quiet -print_format json -show_streams \"{file}\"";
+                p.StartInfo.RedirectStandardOutput = true;
+                p.StartInfo.UseShellExecute = false;
+
+                p.Start();
+
+                string json = p.StandardOutput.ReadToEnd();
+                p.WaitForExit();
+
+                var root = JsonNode.Parse(json);
+                var streams = root?["streams"]?.AsArray();
+
+                var v = streams?.FirstOrDefault(s => s?["codec_type"]?.ToString() == "video");
+
+                if (v == null) return "no video";
+
+                string w = v["width"]?.ToString() ?? "?";
+                string h = v["height"]?.ToString() ?? "?";
+
+                string fpsRaw = v["r_frame_rate"]?.ToString() ?? "0/1";
+                double fps = ParseFps(fpsRaw);
+
+                return $"{w}x{h} {fps:F2}fps";
+            }
+            catch
+            {
+                return "error";
+            }
+        }
+
+        // Парсинг FPS вида "30000/1001"
+        private double ParseFps(string val)
+        {
+            var parts = val.Split('/');
+
+            if (parts.Length == 2 &&
+                double.TryParse(parts[0], out double a) &&
+                double.TryParse(parts[1], out double b) &&
+                b != 0)
+            {
+                return a / b;
+            }
+
+            return 0;
+        }
+
+        // ================= PLAYER =================
+
         private void PlayCurrent()
         {
             if (_currentIndex < 0 || _currentIndex >= _files.Count)
@@ -85,10 +149,17 @@ namespace AI_Video_ToolKit.UI
 
             if (!IsVideo(file)) return;
 
-            VideoPlayer.Stop();
-            VideoPlayer.Source = null;
-            VideoPlayer.Source = new Uri(file);
-            VideoPlayer.Play();
+            try
+            {
+                VideoPlayer.Stop();
+                VideoPlayer.Source = null;
+                VideoPlayer.Source = new Uri(file);
+                VideoPlayer.Play();
+            }
+            catch
+            {
+                StatusText.Text = "Player error";
+            }
         }
 
         private void FileSelector_Changed(object sender, SelectionChangedEventArgs e)
@@ -97,6 +168,7 @@ namespace AI_Video_ToolKit.UI
             PlayCurrent();
         }
 
+        // Кнопки управления плеером
         private void Play_Click(object sender, RoutedEventArgs e) => PlayCurrent();
         private void Pause_Click(object sender, RoutedEventArgs e) => VideoPlayer.Pause();
         private void Stop_Click(object sender, RoutedEventArgs e) => VideoPlayer.Stop();
@@ -113,105 +185,158 @@ namespace AI_Video_ToolKit.UI
                 FileSelector.SelectedIndex = ++_currentIndex;
         }
 
-        // ================= FFPROBE =================
-        private string AnalyzeVideo(string file)
+        // ================= EXTRACT =================
+
+        private async void ExtractFrames_Click(object sender, RoutedEventArgs e)
         {
-            try
+            if (_currentIndex < 0) return;
+
+            string input = _files[_currentIndex];
+
+            if (!IsVideo(input))
             {
-                string ffprobe = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
-
-                var p = new Process();
-                p.StartInfo.FileName = ffprobe;
-                p.StartInfo.Arguments = $"-v quiet -print_format json -show_streams \"{file}\"";
-                p.StartInfo.RedirectStandardOutput = true;
-                p.StartInfo.UseShellExecute = false;
-
-                p.Start();
-                string json = p.StandardOutput.ReadToEnd();
-                p.WaitForExit();
-
-                var root = JsonNode.Parse(json);
-                var streams = root?["streams"]?.AsArray();
-
-                var v = streams?.FirstOrDefault(s => s?["codec_type"]?.ToString() == "video");
-
-                if (v == null) return "No video";
-
-                string w = v["width"]?.ToString() ?? "?";
-                string h = v["height"]?.ToString() ?? "?";
-                string fpsRaw = v["r_frame_rate"]?.ToString() ?? "0/1";
-
-                double fps = ParseFps(fpsRaw);
-
-                return $"{w}x{h} {fps:F1}fps";
+                StatusText.Text = "Select video";
+                return;
             }
-            catch
-            {
-                return "error";
-            }
+
+            string output = GetOutputFolder();
+            string frames = Path.Combine(output, "frames");
+
+            Directory.CreateDirectory(frames);
+
+            string args = $"-i \"{input}\" \"{frames}\\frame_%04d.png\"";
+
+            bool ok = await RunFFmpeg(args);
+
+            StatusText.Text = ok ? "Extract DONE" : "Extract FAILED";
         }
 
-        private double ParseFps(string val)
-        {
-            var p = val.Split('/');
-            if (p.Length == 2 &&
-                double.TryParse(p[0], out double a) &&
-                double.TryParse(p[1], out double b) && b != 0)
-                return a / b;
+        // ================= BUILD =================
 
-            return 0;
+        private async void BuildVideo_Click(object sender, RoutedEventArgs e)
+        {
+            string output = GetOutputFolder();
+
+            string args =
+                $"-framerate 30 -i \"{output}\\frames\\frame_%04d.png\" -c:v libx264 \"{output}\\result.mp4\"";
+
+            bool ok = await RunFFmpeg(args);
+
+            StatusText.Text = ok ? "Build DONE" : "Build FAILED";
+        }
+
+        // ================= RUN FFMPEG =================
+
+        private Task<bool> RunFFmpeg(string args)
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    var p = new Process();
+
+                    p.StartInfo.FileName = FFMPEG;
+                    p.StartInfo.Arguments = args;
+                    p.StartInfo.RedirectStandardError = true;
+                    p.StartInfo.UseShellExecute = false;
+
+                    p.Start();
+                    p.WaitForExit();
+
+                    return p.ExitCode == 0;
+                }
+                catch
+                {
+                    return false;
+                }
+            });
+        }
+
+        // ================= OUTPUT =================
+
+        private string GetOutputFolder()
+        {
+            string path = OutputPathBox.Text;
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "output");
+            }
+
+            Directory.CreateDirectory(path);
+
+            return path;
         }
 
         // ================= IMAGE =================
+
         private void AddImage(string path)
         {
-            var img = new Image
+            var img = new System.Windows.Controls.Image
             {
                 Source = new BitmapImage(new Uri(path)),
-                Width = 90
+                Width = 80
             };
 
             ImageTimeline.Children.Add(img);
         }
 
         // ================= TYPES =================
-        private bool IsVideo(string f) => f.EndsWith(".mp4") || f.EndsWith(".mkv");
-        private bool IsImage(string f) => f.EndsWith(".png") || f.EndsWith(".jpg");
+
+        private bool IsVideo(string f) =>
+            f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+            f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase);
+
+        private bool IsImage(string f) =>
+            f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+            f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase);
 
         // ================= UI =================
+
         private void BrowseInput_Click(object sender, RoutedEventArgs e)
         {
             var d = new Microsoft.Win32.OpenFileDialog { Multiselect = true };
-            if (d.ShowDialog() == true)
+
+            if (d.ShowDialog() == true && d.FileNames.Length > 0)
+            {
+                string? folder = Path.GetDirectoryName(d.FileNames[0]);
+
+                if (!string.IsNullOrEmpty(folder))
+                    InputPathBox.Text = folder;
+
                 LoadFiles(d.FileNames);
+            }
         }
 
         private void BrowseOutput_Click(object sender, RoutedEventArgs e)
         {
-            var d = new Microsoft.Win32.SaveFileDialog();
+            var d = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = "Select Folder"
+            };
+
             if (d.ShowDialog() == true)
-                OutputPathBox.Text = Path.GetDirectoryName(d.FileName);
+            {
+                string? folder = Path.GetDirectoryName(d.FileName);
+
+                if (!string.IsNullOrEmpty(folder))
+                    OutputPathBox.Text = folder;
+            }
         }
 
-        private void Window_Drop(object sender, DragEventArgs e)
+        // ================= DRAG & DROP =================
+
+        private void Window_Drop(object sender, System.Windows.DragEventArgs e)
         {
-            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (!e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) return;
+
+            var files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
             LoadFiles(files);
         }
 
-        private void Window_DragOver(object sender, DragEventArgs e)
+        private void Window_DragOver(object sender, System.Windows.DragEventArgs e)
         {
-            e.Effects = DragDropEffects.Copy;
-        }
-
-        private void ExtractFrames_Click(object sender, RoutedEventArgs e)
-        {
-            StatusText.Text = "Extract...";
-        }
-
-        private void BuildVideo_Click(object sender, RoutedEventArgs e)
-        {
-            StatusText.Text = "Build...";
+            e.Effects = System.Windows.DragDropEffects.Copy;
         }
     }
 }
