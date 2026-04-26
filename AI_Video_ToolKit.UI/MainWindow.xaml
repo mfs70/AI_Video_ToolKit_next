@@ -12,7 +12,7 @@
                 <Grid.RowDefinitions>
                         <RowDefinition Height="40"/>
                         <RowDefinition/>
-                        <RowDefinition Height="120"/>
+                        <RowDefinition Height="140"/>
                 </Grid.RowDefinitions>
 
                 <!-- TOP -->
@@ -27,21 +27,24 @@
                                         Margin="10,0"/>
                 </StackPanel>
 
-                <!-- PLAYER -->
+                <!-- PLAYER / IMAGE -->
                 <Grid Grid.Row="1">
+
                         <MediaElement x:Name="VideoPlayer"
                                       LoadedBehavior="Manual"
                                       Stretch="Uniform"/>
+
+                        <Image x:Name="ImageViewer"
+                               Stretch="Uniform"
+                               Visibility="Collapsed"/>
 
                         <Canvas x:Name="CropCanvas"
                                         Background="Transparent"/>
                 </Grid>
 
                 <!-- CONTROLS -->
-                <StackPanel Grid.Row="2"
-                                Background="#2D2D30">
+                <StackPanel Grid.Row="2">
 
-                        <!-- Player controls -->
                         <StackPanel Orientation="Horizontal">
                                 <Button Content="⏮"
                                                 Width="50"
@@ -66,9 +69,10 @@
                                                 Click="Split_Click"/>
                                 <Button Content="Crop"
                                                 Click="Crop_Click"/>
+                                <Button Content="Probe"
+                                                Click="Probe_Click"/>
                         </StackPanel>
 
-                        <!-- LOG -->
                         <TextBox x:Name="LogBox"
                                  Margin="5"
                                  Height="80"

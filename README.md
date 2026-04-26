@@ -1,91 +1,319 @@
-# 🎬 AI_Video_ToolKit_next
+# 🎬 AI Video Toolkit (WPF + FFmpeg)
 
-GUI-first инструмент для работы с видео на базе FFmpeg.
+## 📌 Описание проекта
 
----
+**AI Video Toolkit** — это настольное приложение на базе **WPF (.NET 8)** для работы с видео и изображениями с использованием:
 
-## 🚀 Возможности
-
-- 🎥 Встроенный видеоплеер (WPF)
-- ⏯ Play / Pause / Stop
-- ⏱ Timeline + перемотка
-- 📊 ProgressBar при кодировании
-- 🧠 FFprobe анализ
-- 🎬 FFmpeg encoding
-- 📁 Выбор входного файла и выходной папки
-- 📝 Live лог выполнения
+* 🎞 **FFmpeg** — обработка видео
+* 🔍 **FFprobe** — анализ медиафайлов
+* 🧠 (в будущем) **Real-ESRGAN / RIFE** — AI апскейл и интерполяция
 
 ---
 
-## 🧱 Архитектура
+## 🎯 Основные возможности (на текущий момент)
+
+### 📂 Работа с файлами
+
+* Drag & Drop:
+
+  * одиночные файлы
+  * папки с видео
+  * папки с изображениями
+* Поддерживаемые форматы:
+
+  * Видео: `.mp4`, `.mkv`
+  * Изображения: `.png`, `.jpg`
+
+---
+
+### ▶️ Встроенный плеер
+
+* Воспроизведение видео (MediaElement)
+* Просмотр изображений (Image)
+* Управление:
+
+  * ⏮ Предыдущий
+  * ▶ Старт
+  * ⏸ Пауза
+  * ⏹ Стоп
+  * ⏭ Следующий
+
+---
+
+### ✂️ Операции FFmpeg
+
+#### Trim (обрезка)
+
+```bash
+ffmpeg -i input.mp4 -ss 00:00:02 -t 00:00:05 -c copy output.mp4
+```
+
+---
+
+#### Split (разделение)
+
+```bash
+ffmpeg -i input.mp4 -f segment -segment_time 5 output_%03d.mp4
+```
+
+---
+
+#### Crop (кадрирование)
+
+```bash
+ffmpeg -i input.mp4 -vf crop=300:300:0:0 output.mp4
+```
+
+---
+
+### 🔍 Анализ (FFprobe)
+
+```bash
+ffprobe -show_format -show_streams input.mp4
+```
+
+✔ выводится в лог-панель UI
+
+---
+
+### 📜 Логирование
+
+* Все операции FFmpeg и FFprobe:
+
+  * stdout
+  * stderr
+* отображаются в UI (LogBox)
+
+---
+
+## 🧱 Архитектура проекта
+
+```text
 AI_Video_ToolKit_next/
 │
-├── AI_Video_ToolKit.UI/ # WPF GUI
-├── app/ # PowerShell toolkit (будет)
-├── scripts/ # вспомогательные скрипты
-├── docs/ # документация
-└── README.md
-
-
----
-
-## ⚙️ Зависимости
-
-Все бинарники находятся отдельно:
-C:_Portable_\
-
-### Требуется:
-
-- ffmpeg
-- ffprobe
-- ffplay
-
-Пример:
-C:_Portable_\ffmpeg\bin\ffmpeg.exe
+├── AI_Video_ToolKit.UI            # WPF интерфейс
+├── AI_Video_ToolKit.Core          # Бизнес-логика
+├── AI_Video_ToolKit.Infrastructure# Работа с FFmpeg
+├── AI_Video_ToolKit.Domain        # (резерв)
+```
 
 ---
 
-## ▶️ Запуск
+### 🔹 UI (WPF)
+
+* MainWindow.xaml
+* MediaElement (видео)
+* Image (картинки)
+* Canvas (под crop инструмент)
+
+---
+
+### 🔹 Core
+
+* `VideoEditService`
+* проксирует команды в FFmpeg
+
+---
+
+### 🔹 Infrastructure
+
+* `FFmpegService`
+* запуск процессов
+* сбор логов
+* обработка ошибок
+
+---
+
+## ⚙️ Установка и запуск
+
+---
+
+### 1. Установить .NET
+
+```bash
+dotnet --version
+```
+
+Рекомендуется:
+
+```
+.NET 8 SDK
+```
+
+---
+
+### 2. Установить FFmpeg
+
+📥 Скачать:
+https://ffmpeg.org/download.html
+
+📁 Пример пути:
+
+```text
+C:\_Portable_\ffmpeg\bin\ffmpeg.exe
+```
+
+---
+
+### 3. Указать путь в коде
+
+Файл:
+
+```
+MainWindow.xaml.cs
+```
+
+```csharp
+string ffmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+```
+
+---
+
+### 4. Запуск проекта
 
 ```bash
 dotnet build
 dotnet run
+```
 
+---
 
+## ⚠️ Частые проблемы
 
-📦 Как использовать
-1. Выбрать входной файл
+---
 
-Browse → выбрать видео
+### ❌ FFmpeg не работает
 
-2. Выбрать папку вывода
+Причина:
 
-Browse → выбрать папку
+```
+FFmpeg NOT FOUND
+```
 
-3. Preview
+Решение:
 
-Просмотр видео внутри приложения
+* проверить путь
+* проверить наличие `ffmpeg.exe`
 
-4. Encode
+---
 
-Кодирование:
+### ❌ Лог пустой
 
-файл сохраняется в выбранную папку
-имя генерируется автоматически
+Причина:
 
-📊 Прогресс
-отображается % выполнения
-основан на времени (time= из FFmpeg)
+* процесс не стартует
 
-⚠️ Ограничения
-MediaElement зависит от кодеков Windows
-рекомендуется использовать H.264
+Решение:
 
-🧠 Roadmap
- STOP encoding
- ETA (оставшееся время)
- скорость кодирования
- presets (1080p / 4K)
- интеграция Real-ESRGAN
- интеграция RIFE
- PowerShell pipeline
+* смотри LogBox
+* добавлены проверки
+
+---
+
+### ❌ Ошибка сборки (файл занят)
+
+```
+MSB3021 / MSB3027
+```
+
+Решение:
+
+```bash
+taskkill /IM AI_Video_ToolKit.UI.exe /F
+```
+
+---
+
+### ❌ Не работает Drag & Drop
+
+Проверить:
+
+* `AllowDrop="True"`
+* обработчики:
+
+  * `Window_Drop`
+  * `Window_DragOver`
+
+---
+
+## 📌 Принципы разработки
+
+---
+
+### 🚫 НЕ используем:
+
+```csharp
+System.Windows.Forms
+System.Drawing
+```
+
+---
+
+### ✅ ВСЕГДА используем:
+
+```csharp
+System.IO.Path
+System.Windows.MessageBox
+System.Windows.Controls.Canvas
+```
+
+---
+
+### 🧠 Причина:
+
+избежать конфликтов типов (WPF vs WinForms)
+
+---
+
+## 🚀 План развития
+
+---
+
+### 🔜 Ближайшие шаги
+
+* [ ] Парсинг ffprobe → FPS / Resolution / Codec
+* [ ] Отображение параметров в UI
+* [ ] Таймлайн изображений (как Premiere)
+* [ ] Удаление кадров из последовательности
+* [ ] Сборка изображений → видео
+
+---
+
+### 🔜 Плагины
+
+* [ ] Real-ESRGAN (апскейл)
+* [ ] RIFE (интерполяция FPS)
+* [ ] Plugin system (модульная архитектура)
+
+---
+
+## 💡 Идеология проекта
+
+```text
+Минимум UI — максимум контроля над FFmpeg
+```
+
+---
+
+## 📎 Авторские рекомендации
+
+* Всегда проверяй путь к FFmpeg
+* Не используй WinForms в WPF
+* Всегда логируй процессы
+* Работай через сервисы (Core / Infrastructure)
+
+---
+
+## 🏁 Итог
+
+Проект уже реализует:
+
+✔ загрузку файлов
+✔ воспроизведение
+✔ базовый монтаж
+✔ анализ медиа
+✔ архитектуру под расширение
+
+---
+
+👉 Следующий уровень — полноценный видеоредактор с AI модулями
