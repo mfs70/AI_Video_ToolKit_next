@@ -1,0 +1,39 @@
+PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet build
+  Определение проектов для восстановления...
+  Все проекты обновлены для восстановления.
+  AI_Video_ToolKit.Domain -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Domain\bin\Debug\net8.0\AI_Video_ToolKit.Domain.dll
+  AI_Video_ToolKit.Infrastructure -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Infrastructure\bin\Debug\net8.0\AI_Video_ToolKit.Infrastructure.dll
+  AI_Video_ToolKit.Core -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Core\bin\Debug\net8.0\AI_Video_ToolKit.Core.dll
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(52,108): error CS1061: "MainWindow" не содержит определения "Trim_Click", и не удалось найт
+и доступный метод расширения "Trim_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка на 
+сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(53,108): error CS1061: "MainWindow" не содержит определения "Split_Click", и не удалось най 
+ти доступный метод расширения "Split_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка н 
+а сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(54,108): error CS1061: "MainWindow" не содержит определения "Crop_Click", и не удалось найт 
+и доступный метод расширения "Crop_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка на  
+сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(55,108): error CS1061: "MainWindow" не содержит определения "Probe_Click", и не удалось най 
+ти доступный метод расширения "Probe_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка н 
+а сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(38,28): warning CS0414: Полю "MainWindow._activeRect" присвоено значение, но оно ни разу 
+ не использовано. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+
+Ошибка сборки.
+
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(38,28): warning CS0414: Полю "MainWindow._activeRect" присвоено значение, но оно ни разу 
+ не использовано. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(52,108): error CS1061: "MainWindow" не содержит определения "Trim_Click", и не удалось найт 
+и доступный метод расширения "Trim_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка на  
+сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(53,108): error CS1061: "MainWindow" не содержит определения "Split_Click", и не удалось най 
+ти доступный метод расширения "Split_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка н 
+а сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(54,108): error CS1061: "MainWindow" не содержит определения "Crop_Click", и не удалось найт 
+и доступный метод расширения "Crop_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка на  
+сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(55,108): error CS1061: "MainWindow" не содержит определения "Probe_Click", и не удалось най 
+ти доступный метод расширения "Probe_Click", принимающий тип "MainWindow" в качестве первого аргумента (возможно, пропущена директива using или ссылка н 
+а сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
+    Предупреждений: 1
+    Ошибок: 4
