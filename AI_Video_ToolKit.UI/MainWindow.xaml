@@ -11,44 +11,92 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="40"/>
             <RowDefinition/>
-            <RowDefinition Height="140"/>
+            <RowDefinition Height="160"/>
             <RowDefinition Height="180"/>
         </Grid.RowDefinitions>
 
-        <!-- TOP PANEL -->
+        <!-- TOP -->
         <StackPanel Orientation="Horizontal" Grid.Row="0">
             <Button Content="Open Files" Width="120" Margin="5" Click="OpenFiles_Click"/>
             <TextBlock x:Name="CurrentFileText" VerticalAlignment="Center" Margin="10,0"/>
         </StackPanel>
 
-        <!-- PREVIEW -->
+        <!-- MAIN -->
         <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="1*"/>
+            </Grid.ColumnDefinitions>
 
-            <MediaElement x:Name="VideoPlayer"
-                          LoadedBehavior="Manual"
-                          Stretch="Uniform"/>
+            <!-- PLAYER -->
+            <Border Grid.Column="0" Background="Black" Margin="5">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition Height="40"/>
+                    </Grid.RowDefinitions>
 
-            <Image x:Name="ImageViewer"
-                   Stretch="Uniform"
-                   Visibility="Collapsed"/>
+                    <Grid>
+                        <MediaElement x:Name="VideoPlayer"
+                                      LoadedBehavior="Manual"
+                                      Stretch="Uniform"
+                                      MediaOpened="VideoPlayer_MediaOpened"/>
 
-            <!-- Crop overlay -->
-            <Canvas x:Name="CropCanvas" Background="Transparent"/>
+                        <Image x:Name="ImageViewer"
+                               Stretch="Uniform"
+                               Visibility="Collapsed"/>
+                    </Grid>
+
+                    <!-- SEEK -->
+                    <Grid Grid.Row="1" Background="#1e1e1e">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="CurrentTimeText" Foreground="White" Text="00:00" HorizontalAlignment="Center"/>
+
+                        <Slider x:Name="SeekBar"
+                                Grid.Column="1"
+                                PreviewMouseDown="SeekBar_PreviewMouseDown"
+                                PreviewMouseUp="SeekBar_PreviewMouseUp"
+                                ValueChanged="SeekBar_ValueChanged"/>
+
+                        <TextBlock x:Name="DurationText" Grid.Column="2" Foreground="White" Text="00:00" HorizontalAlignment="Center"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- LOG -->
+            <Border Grid.Column="1" Background="#1e1e1e" Margin="5">
+                <TextBox x:Name="LogBox"
+                         Margin="5"
+                         Background="#2d2d30"
+                         Foreground="LightGreen"
+                         FontFamily="Consolas"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"/>
+            </Border>
         </Grid>
 
         <!-- CONTROL PANEL -->
-        <StackPanel Grid.Row="2" Background="#2D2D30">
+        <Grid Grid.Row="2" Background="#2D2D30">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>   <!-- controls -->
+                <ColumnDefinition Width="1*"/>   <!-- encode -->
+                <ColumnDefinition Width="1*"/>   <!-- decode -->
+            </Grid.ColumnDefinitions>
 
-            <StackPanel Orientation="Horizontal">
+            <!-- LEFT: PLAYER + EDIT -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
 
-                <!-- Player -->
                 <Button Content="⏮" Width="50" Click="Prev_Click"/>
                 <Button Content="▶" Width="50" Click="Play_Click"/>
                 <Button Content="⏸" Width="50" Click="Pause_Click"/>
                 <Button Content="⏹" Width="50" Click="Stop_Click"/>
                 <Button Content="⏭" Width="50" Click="Next_Click"/>
 
-                <!-- FFmpeg -->
                 <Button Content="Trim" Margin="10,0" Click="Trim_Click"/>
                 <Button Content="Split" Click="Split_Click"/>
                 <Button Content="Crop" Click="Crop_Click"/>
@@ -56,13 +104,25 @@
 
             </StackPanel>
 
-            <!-- LOG -->
-            <TextBox x:Name="LogBox"
-                     Margin="5"
-                     Height="80"
-                     TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto"/>
-        </StackPanel>
+            <!-- ENCODE (25%) -->
+            <GroupBox Header="Encode" Grid.Column="1" Margin="5">
+                <StackPanel>
+                    <TextBox x:Name="EncodeOutputPath" Text="D:\frames" Margin="0,5"/>
+                    <Button Content="Folder" Click="SelectEncodeFolder_Click"/>
+                    <Button Content="Run Encode" Click="Encode_Click"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- DECODE (25%) -->
+            <GroupBox Header="Decode" Grid.Column="2" Margin="5">
+                <StackPanel>
+                    <TextBox x:Name="DecodeInputPath" Text="D:\frames" Margin="0,5"/>
+                    <Button Content="Folder" Click="SelectDecodeFolder_Click"/>
+                    <Button Content="Run Decode" Click="Decode_Click"/>
+                </StackPanel>
+            </GroupBox>
+
+        </Grid>
 
         <!-- TIMELINE -->
         <Border Grid.Row="3" Background="#1e1e1e">

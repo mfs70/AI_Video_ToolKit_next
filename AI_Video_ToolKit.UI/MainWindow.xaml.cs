@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Diagnostics;
+using System.Windows.Threading;
 
 using IOPath = System.IO.Path;
 
@@ -30,31 +30,28 @@ namespace AI_Video_ToolKit.UI
         private int _currentIndex = -1;
 
         private TimelineService _timeline = new();
-
         private Dictionary<string, BitmapImage> _thumbCache = new();
 
-        private bool _isDragging;
-        private bool _isResizing;
-        private Point _startMouse;
-        private double _startX;
-        private double _startWidth;
+        private DispatcherTimer _timer = new();
+        private bool _isSeeking = false;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            string ffmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
-
-            _ffmpeg = new FFmpegService(ffmpegPath);
+            _ffmpeg = new FFmpegService(@"C:\_Portable_\ffmpeg\bin\ffmpeg.exe");
             _edit = new VideoEditService(_ffmpeg);
+
+            _timer.Interval = TimeSpan.FromMilliseconds(200);
+            _timer.Tick += UpdateSeekBar;
+            _timer.Start();
         }
 
-        // ================= FILE LOAD =================
+        // ================= FILES =================
 
         private void OpenFiles_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new OpenFileDialog { Multiselect = true };
-
             if (dialog.ShowDialog() == true)
                 LoadFiles(dialog.FileNames);
         }
@@ -65,8 +62,7 @@ namespace AI_Video_ToolKit.UI
             {
                 if (Directory.Exists(path))
                 {
-                    var files = Directory.GetFiles(path);
-                    foreach (var f in files)
+                    foreach (var f in Directory.GetFiles(path))
                         AddFile(f);
                 }
                 else if (File.Exists(path))
@@ -86,16 +82,11 @@ namespace AI_Video_ToolKit.UI
 
         private void AddFile(string file)
         {
-            if (!IsSupported(file)) return;
+            string ext = IOPath.GetExtension(file).ToLower();
+            if (ext != ".mp4" && ext != ".mkv" && ext != ".png" && ext != ".jpg") return;
 
             _files.Add(file);
             _timeline.Add(file);
-        }
-
-        private bool IsSupported(string f)
-        {
-            string ext = IOPath.GetExtension(f).ToLower();
-            return ext == ".mp4" || ext == ".mkv" || ext == ".png" || ext == ".jpg";
         }
 
         // ================= PREVIEW =================
@@ -107,7 +98,7 @@ namespace AI_Video_ToolKit.UI
             string file = _files[_currentIndex];
             CurrentFileText.Text = file;
 
-            if (IsVideo(file))
+            if (file.EndsWith(".mp4") || file.EndsWith(".mkv"))
             {
                 ImageViewer.Visibility = Visibility.Collapsed;
                 VideoPlayer.Visibility = Visibility.Visible;
@@ -123,147 +114,6 @@ namespace AI_Video_ToolKit.UI
                 ImageViewer.Visibility = Visibility.Visible;
                 ImageViewer.Source = new BitmapImage(new Uri(file));
             }
-        }
-
-        private bool IsVideo(string f)
-        {
-            string ext = IOPath.GetExtension(f).ToLower();
-            return ext == ".mp4" || ext == ".mkv";
-        }
-
-        // ================= THUMBNAILS =================
-
-        private BitmapImage GetThumbnail(string file)
-        {
-            if (_thumbCache.ContainsKey(file))
-                return _thumbCache[file];
-
-            string thumbPath = IOPath.Combine(IOPath.GetTempPath(), IOPath.GetFileName(file) + ".jpg");
-
-            if (!File.Exists(thumbPath))
-            {
-                if (IsVideo(file))
-                {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe",
-                        Arguments = $"-y -i \"{file}\" -ss 00:00:01 -vframes 1 \"{thumbPath}\"",
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    };
-
-                    Process.Start(psi)?.WaitForExit();
-                }
-                else
-                {
-                    File.Copy(file, thumbPath, true);
-                }
-            }
-
-            var img = new BitmapImage();
-            img.BeginInit();
-            img.UriSource = new Uri(thumbPath);
-            img.CacheOption = BitmapCacheOption.OnLoad;
-            img.EndInit();
-
-            _thumbCache[file] = img;
-            return img;
-        }
-
-        // ================= TIMELINE =================
-
-        private void RedrawTimeline()
-        {
-            TimelineCanvas.Children.Clear();
-
-            foreach (var item in _timeline.Items)
-            {
-                var container = new Grid
-                {
-                    Width = item.Width,
-                    Height = 80,
-                    Tag = item
-                };
-
-                var bg = new Border
-                {
-                    Background = Brushes.Black,
-                    BorderBrush = Brushes.White,
-                    BorderThickness = new Thickness(1)
-                };
-
-                var img = new Image
-                {
-                    Source = GetThumbnail(item.FilePath),
-                    Stretch = Stretch.Fill
-                };
-
-                container.Children.Add(bg);
-                container.Children.Add(img);
-
-                Canvas.SetLeft(container, item.X);
-                Canvas.SetTop(container, 40);
-
-                container.MouseLeftButtonDown += Clip_MouseDown;
-                container.MouseMove += Clip_MouseMove;
-                container.MouseLeftButtonUp += Clip_MouseUp;
-
-                TimelineCanvas.Children.Add(container);
-            }
-        }
-
-        private void Clip_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            var element = sender as FrameworkElement;
-            if (element == null) return;
-
-            _startMouse = e.GetPosition(TimelineCanvas);
-            _startX = Canvas.GetLeft(element);
-            _startWidth = element.Width;
-
-            if (_startMouse.X > _startX + element.Width - 10)
-                _isResizing = true;
-            else
-                _isDragging = true;
-
-            element.CaptureMouse();
-        }
-
-        private void Clip_MouseMove(object sender, MouseEventArgs e)
-        {
-            var element = sender as FrameworkElement;
-            if (element == null) return;
-
-            var pos = e.GetPosition(TimelineCanvas);
-            double dx = pos.X - _startMouse.X;
-
-            var item = (TimelineItem)element.Tag;
-
-            if (_isDragging)
-            {
-                double newX = _startX + dx;
-                if (newX < 0) newX = 0;
-
-                Canvas.SetLeft(element, newX);
-                item.X = newX;
-            }
-
-            if (_isResizing)
-            {
-                double newWidth = _startWidth + dx;
-                if (newWidth < 40) newWidth = 40;
-
-                element.Width = newWidth;
-                item.Width = newWidth;
-            }
-        }
-
-        private void Clip_MouseUp(object sender, MouseButtonEventArgs e)
-        {
-            _isDragging = false;
-            _isResizing = false;
-
-            (sender as FrameworkElement)?.ReleaseMouseCapture();
         }
 
         // ================= PLAYER =================
@@ -290,47 +140,198 @@ namespace AI_Video_ToolKit.UI
             }
         }
 
-        // ================= FFMPEG ACTIONS (FIX ОШИБКИ) =================
+        // ================= SEEK =================
+
+        private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
+        {
+            if (VideoPlayer.NaturalDuration.HasTimeSpan)
+            {
+                var d = VideoPlayer.NaturalDuration.TimeSpan;
+                DurationText.Text = d.ToString(@"mm\:ss");
+                SeekBar.Maximum = d.TotalSeconds;
+            }
+        }
+
+        private void UpdateSeekBar(object? sender, EventArgs e)
+        {
+            if (_isSeeking) return;
+
+            if (VideoPlayer.Source != null && VideoPlayer.NaturalDuration.HasTimeSpan)
+            {
+                SeekBar.Value = VideoPlayer.Position.TotalSeconds;
+                CurrentTimeText.Text = VideoPlayer.Position.ToString(@"mm\:ss");
+            }
+        }
+
+        private void SeekBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!_isSeeking)
+                VideoPlayer.Position = TimeSpan.FromSeconds(SeekBar.Value);
+        }
+
+        private void SeekBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            _isSeeking = true;
+        }
+
+        private void SeekBar_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            _isSeeking = false;
+            VideoPlayer.Position = TimeSpan.FromSeconds(SeekBar.Value);
+        }
+
+        // ================= TIMELINE =================
+
+        private void RedrawTimeline()
+        {
+            TimelineCanvas.Children.Clear();
+
+            double x = 10;
+
+            foreach (var file in _files)
+            {
+                var img = new Image
+                {
+                    Width = 100,
+                    Height = 60,
+                    Stretch = Stretch.Fill,
+                    Source = GetThumbnail(file)
+                };
+
+                Canvas.SetLeft(img, x);
+                Canvas.SetTop(img, 50);
+
+                TimelineCanvas.Children.Add(img);
+
+                x += 110;
+            }
+        }
+
+        private BitmapImage GetThumbnail(string file)
+        {
+            if (_thumbCache.ContainsKey(file))
+                return _thumbCache[file];
+
+            string temp = IOPath.Combine(IOPath.GetTempPath(), IOPath.GetFileName(file) + ".jpg");
+
+            if (!File.Exists(temp))
+            {
+                if (file.EndsWith(".mp4") || file.EndsWith(".mkv"))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe",
+                        Arguments = $"-y -i \"{file}\" -ss 00:00:01 -vframes 1 \"{temp}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    })?.WaitForExit();
+                }
+                else
+                {
+                    File.Copy(file, temp, true);
+                }
+            }
+
+            var bmp = new BitmapImage(new Uri(temp));
+            _thumbCache[file] = bmp;
+            return bmp;
+        }
+
+        // ================= 🎬 EDIT FUNCTIONS =================
 
         private void Trim_Click(object sender, RoutedEventArgs e)
         {
-            var input = GetCurrentFile();
-            if (input == null) return;
+            var f = GetCurrentFile();
+            if (f == null) return;
 
-            var r = _edit.Trim(input, GetOutput("trim.mp4"), "00:00:02", "00:00:05");
+            var r = _edit.Trim(f, GetOut("trim.mp4"), "00:00:02", "00:00:05");
             LogBox.Text = r.Item2;
         }
 
         private void Split_Click(object sender, RoutedEventArgs e)
         {
-            var input = GetCurrentFile();
-            if (input == null) return;
+            var f = GetCurrentFile();
+            if (f == null) return;
 
-            var r = _edit.Split(input, GetOutput("part_%03d.mp4"), 5);
+            var r = _edit.Split(f, GetOut("part_%03d.mp4"), 5);
             LogBox.Text = r.Item2;
         }
 
         private void Crop_Click(object sender, RoutedEventArgs e)
         {
-            var input = GetCurrentFile();
-            if (input == null) return;
+            var f = GetCurrentFile();
+            if (f == null) return;
 
-            var r = _edit.Crop(input, GetOutput("crop.mp4"), 300, 300, 0, 0);
+            var r = _edit.Crop(f, GetOut("crop.mp4"), 300, 300, 0, 0);
             LogBox.Text = r.Item2;
         }
 
         private void Probe_Click(object sender, RoutedEventArgs e)
         {
-            var input = GetCurrentFile();
-            if (input == null) return;
+            var f = GetCurrentFile();
+            if (f == null) return;
 
-            var r = _ffmpeg.Probe(input);
+            var r = _ffmpeg.Probe(f);
             LogBox.Text = r.Item2;
         }
 
-        // ================= HELPERS =================
+        // ================= ENCODE / DECODE =================
 
-        private string GetOutput(string name)
+        private void Encode_Click(object sender, RoutedEventArgs e)
+        {
+            var f = GetCurrentFile();
+            if (f == null) return;
+
+            string dir = EncodeOutputPath.Text;
+            Directory.CreateDirectory(dir);
+
+            string output = IOPath.Combine(dir, "frame_%05d.png");
+
+            var r = _ffmpeg.Run($"-i \"{f}\" \"{output}\"");
+            LogBox.Text = r.Item2;
+        }
+
+        private void Decode_Click(object sender, RoutedEventArgs e)
+        {
+            string dir = DecodeInputPath.Text;
+
+            if (!Directory.Exists(dir))
+            {
+                LogBox.Text = "Folder not found";
+                return;
+            }
+
+            string output = IOPath.Combine(dir, "output.mp4");
+
+            var r = _ffmpeg.Run($"-framerate 30 -i \"{dir}\\frame_%05d.png\" -c:v libx264 \"{output}\"");
+            LogBox.Text = r.Item2;
+        }
+
+        private void SelectEncodeFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                CheckFileExists = false,
+                FileName = "Select folder"
+            };
+
+            if (dialog.ShowDialog() == true)
+                EncodeOutputPath.Text = IOPath.GetDirectoryName(dialog.FileName);
+        }
+
+        private void SelectDecodeFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                CheckFileExists = false,
+                FileName = "Select folder"
+            };
+
+            if (dialog.ShowDialog() == true)
+                DecodeInputPath.Text = IOPath.GetDirectoryName(dialog.FileName);
+        }
+
+        private string GetOut(string name)
         {
             string dir = @"D:\output";
             Directory.CreateDirectory(dir);
