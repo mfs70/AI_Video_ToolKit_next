@@ -5,6 +5,10 @@
     <ProjectReference Include="..\AI_Video_ToolKit.Infrastructure\AI_Video_ToolKit.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>

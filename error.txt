@@ -1,1 +1,16 @@
-https://chatgpt.com/share/69f030aa-b12c-83eb-8eb9-1cdafe8cc27c
+PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet build
+  Определение проектов для восстановления...
+  Все проекты обновлены для восстановления.
+  AI_Video_ToolKit.Domain -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Domain\bin\Debug\net8.0\AI_Video_ToolKit.Domain.dll
+  AI_Video_ToolKit.Infrastructure -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Infrastructure\bin\Debug\net8.0\AI_Video_ToolKit.I
+  nfrastructure.dll
+  AI_Video_ToolKit.Core -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Core\bin\Debug\net8.0\AI_Video_ToolKit.Core.dll
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(1,1): error CS0106: Модификатор "private" недопустим для этого эл
+емента. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_kzjolnzk_wpftmp.csproj]
+
+Ошибка сборки.
+
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(1,1): error CS0106: Модификатор "private" недопустим для этого эл 
+емента. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_kzjolnzk_wpftmp.csproj]
+    Предупреждений: 0
+    Ошибок: 1

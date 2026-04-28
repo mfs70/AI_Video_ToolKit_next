@@ -1,0 +1,24 @@
+<UserControl x:Class="AI_Video_ToolKit.UI.Controls.VideoPreviewControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Image x:Name="VideoFrame" Stretch="Uniform"/>
+
+        <Canvas x:Name="OverlayCanvas">
+            <Rectangle x:Name="CropRect"
+                       Width="200"
+                       Height="150"
+                       Stroke="Lime"
+                       StrokeThickness="2"
+                       Fill="#3300FF00"/>
+
+            <!-- resize handle -->
+            <Rectangle x:Name="ResizeHandle"
+                       Width="10"
+                       Height="10"
+                       Fill="Yellow"
+                       Cursor="SizeNWSE"/>
+        </Canvas>
+    </Grid>
+</UserControl>
