@@ -23,12 +23,8 @@ namespace AI_Video_ToolKit.UI
         private double _fps;
         private TimeSpan _currentTime = TimeSpan.Zero;
 
-        private TimeSpan _inPoint = TimeSpan.Zero;
-        private TimeSpan _outPoint = TimeSpan.Zero;
-
         private bool _isPlaying = false;
         private bool _userInteracting = false;
-        private bool _seekChangedWhilePaused = false;
 
         private CancellationTokenSource? _seekCts;
 
@@ -36,67 +32,62 @@ namespace AI_Video_ToolKit.UI
         {
             InitializeComponent();
 
-            _player.OnFrame += f =>
-                Dispatcher.Invoke(() => Preview.SetFrame(f));
+            // ==== VIDEO OUTPUT ====
+            _player.OnFrame += frame =>
+                Dispatcher.Invoke(() => Preview.SetFrame(frame));
 
-            _player.OnPositionChanged += t =>
+            // ==== TIME SYNC ====
+            _player.OnPositionChanged += time =>
             {
-                _currentTime = t;
+                _currentTime = time;
 
                 if (_userInteracting) return;
 
                 Dispatcher.Invoke(() =>
-                    Timeline.SetCurrentTime(t));
-
-                HandlePlaybackBounds(t);
+                    Timeline.SetCurrentTime(time));
             };
 
-            Timeline.OnUserInteraction += b => _userInteracting = b;
+            // ==== LOOP / PLAYLIST ====
+            _player.OnPlaybackEnded += () =>
+            {
+                Dispatcher.Invoke(async () =>
+                {
+                    // LOOP текущего файла
+                    if (LoopCheck.IsChecked == true)
+                    {
+                        RestartPlayback();
+                        return;
+                    }
+
+                    // следующий файл
+                    if (_index < _playlist.Count - 1)
+                    {
+                        _index++;
+                        RefreshPlaylist();
+                        await LoadCurrent();
+                    }
+                    else
+                    {
+                        _isPlaying = false;
+                    }
+                });
+            };
+
+            // ==== TIMELINE ====
+            Timeline.OnUserInteraction += active =>
+                _userInteracting = active;
+
             Timeline.OnTimeChanged += Timeline_OnTimeChanged;
         }
 
-        // =========================
-        // PLAYBACK BOUNDS (FIX LOOP + PLAYLIST)
-        // =========================
-
-        private void HandlePlaybackBounds(TimeSpan t)
-        {
-            if (_outPoint <= _inPoint) return;
-
-            if (t < _outPoint) return;
-
-            // LOOP
-            if (LoopCheck.IsChecked == true)
-            {
-                _currentTime = _inPoint;
-                RestartPlayback();
-                return;
-            }
-
-            // NEXT FILE
-            if (_index < _playlist.Count - 1)
-            {
-                _index++;
-                Dispatcher.Invoke(async () =>
-                {
-                    RefreshPlaylist();
-                    await LoadCurrent();
-                });
-            }
-            else
-            {
-                _player.Pause();
-                _isPlaying = false;
-            }
-        }
-
-        // =========================
-        // LOAD
-        // =========================
+        // ================= LOAD =================
 
         private async void Load_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog { Multiselect = true };
+            var dlg = new OpenFileDialog
+            {
+                Multiselect = true
+            };
 
             if (dlg.ShowDialog() != true)
                 return;
@@ -122,21 +113,16 @@ namespace AI_Video_ToolKit.UI
             var info = await _ffprobe.GetInfo(file);
 
             _fps = info.fps;
-
             _currentTime = TimeSpan.Zero;
-            _inPoint = TimeSpan.Zero;
-            _outPoint = TimeSpan.FromSeconds(info.duration);
 
             Timeline.SetDuration(info.duration);
-            Timeline.SetInOut(_inPoint, _outPoint);
             Timeline.SetCurrentTime(TimeSpan.Zero);
 
-            // 🔥 ПОКАЗЫВАЕМ ПЕРВЫЙ КАДР
+            // первый кадр
             var frame = await _grabber.GetFrame(file, _currentTime, 1280, 720);
             if (frame != null)
                 Preview.SetFrame(frame);
 
-            _isPlaying = true;
             StartPlayback();
         }
 
@@ -147,9 +133,24 @@ namespace AI_Video_ToolKit.UI
             PlaylistBox.SelectedIndex = _index;
         }
 
-        // =========================
-        // PLAY CONTROL (FIX)
-        // =========================
+        // ================= PLAY =================
+
+        private void StartPlayback()
+        {
+            if (_index < 0) return;
+
+            _player.Start(_playlist[_index], 1280, 720, _fps, _currentTime);
+            _isPlaying = true;
+        }
+
+        private void RestartPlayback()
+        {
+            if (_index < 0) return;
+
+            _player.Stop();
+            _player.Start(_playlist[_index], 1280, 720, _fps, _currentTime);
+            _isPlaying = true;
+        }
 
         private void TogglePlayPause_Click(object sender, RoutedEventArgs e)
         {
@@ -159,40 +160,24 @@ namespace AI_Video_ToolKit.UI
             {
                 _player.Pause();
                 _isPlaying = false;
-                return;
             }
-
-            // 🔥 если был seek — только restart
-            if (_seekChangedWhilePaused)
+            else
             {
-                _seekChangedWhilePaused = false;
-                RestartPlayback();
-                return;
+                _player.Resume();
+                _isPlaying = true;
             }
-
-            _player.Resume();
-            _isPlaying = true;
-        }
-
-        private void StartPlayback()
-        {
-            _player.Start(_playlist[_index], 1280, 720, _fps, _currentTime);
-        }
-
-        private void RestartPlayback()
-        {
-            _player.Stop();
-            _player.Start(_playlist[_index], 1280, 720, _fps, _currentTime);
         }
 
         private void Stop_Click(object sender, RoutedEventArgs e)
         {
             _player.Stop();
             _isPlaying = false;
-            _currentTime = TimeSpan.Zero;
 
+            _currentTime = TimeSpan.Zero;
             Timeline.SetCurrentTime(_currentTime);
         }
+
+        // ================= NAV =================
 
         private void Prev_Click(object sender, RoutedEventArgs e)
         {
@@ -223,16 +208,11 @@ namespace AI_Video_ToolKit.UI
             }
         }
 
-        // =========================
-        // TIMELINE (FIX)
-        // =========================
+        // ================= TIMELINE =================
 
         private void Timeline_OnTimeChanged(TimeSpan time)
         {
             _currentTime = time;
-
-            if (!_isPlaying)
-                _seekChangedWhilePaused = true;
 
             _seekCts?.Cancel();
             _seekCts = new CancellationTokenSource();
@@ -247,35 +227,16 @@ namespace AI_Video_ToolKit.UI
 
                     if (token.IsCancellationRequested) return;
 
-                    if (_isPlaying)
+                    Dispatcher.Invoke(() =>
                     {
-                        Dispatcher.Invoke(RestartPlayback);
-                    }
-                    else
-                    {
-                        var frame = await _grabber.GetFrame(
-                            _playlist[_index],
-                            _currentTime,
-                            1280,
-                            720);
-
-                        if (frame != null)
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                Preview.SetFrame(frame);
-                                Timeline.SetCurrentTime(_currentTime);
-                            });
-                        }
-                    }
+                        RestartPlayback();
+                    });
                 }
                 catch { }
             });
         }
 
-        // =========================
-        // HOTKEYS
-        // =========================
+        // ================= HOTKEYS =================
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
@@ -298,32 +259,21 @@ namespace AI_Video_ToolKit.UI
                 StepFrame(1);
                 e.Handled = true;
             }
-
-            if (e.Key == Key.I)
-            {
-                _inPoint = _currentTime;
-                Timeline.SetInOut(_inPoint, _outPoint);
-            }
-
-            if (e.Key == Key.O)
-            {
-                _outPoint = _currentTime;
-                Timeline.SetInOut(_inPoint, _outPoint);
-            }
         }
 
-        private async void StepFrame(int dir)
+        private async void StepFrame(int direction)
         {
-            if (_fps <= 0) return;
+            if (_fps <= 0 || _index < 0) return;
 
-            _currentTime += TimeSpan.FromSeconds(dir * (1.0 / _fps));
+            double frameTime = 1.0 / _fps;
 
-            if (_currentTime < _inPoint) _currentTime = _inPoint;
-            if (_currentTime > _outPoint) _currentTime = _outPoint;
+            _currentTime += TimeSpan.FromSeconds(direction * frameTime);
+
+            if (_currentTime < TimeSpan.Zero)
+                _currentTime = TimeSpan.Zero;
 
             _player.Pause();
             _isPlaying = false;
-            _seekChangedWhilePaused = true;
 
             var frame = await _grabber.GetFrame(
                 _playlist[_index],
@@ -338,9 +288,7 @@ namespace AI_Video_ToolKit.UI
             }
         }
 
-        // =========================
-        // DRAG & DROP (FIX FOLDERS)
-        // =========================
+        // ================= DRAG & DROP =================
 
         private async void Window_Drop(object sender, DragEventArgs e)
         {
