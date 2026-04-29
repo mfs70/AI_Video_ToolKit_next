@@ -13,8 +13,6 @@ namespace AI_Video_ToolKit.UI.Services
 
         public async Task<BitmapSource?> GetFrame(string file, TimeSpan time, int width, int height)
         {
-            string tempFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".bmp");
-
             try
             {
                 var psi = new ProcessStartInfo
@@ -25,46 +23,49 @@ namespace AI_Video_ToolKit.UI.Services
                         $"-frames:v 1 " +
                         $"-vf scale={width}:{height}:force_original_aspect_ratio=decrease," +
                         $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2 " +
-                        $"\"{tempFile}\" -y",
+                        "-f rawvideo -pix_fmt bgr24 -",
+                    RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
 
                 var process = Process.Start(psi);
-
                 if (process == null)
                     return null;
 
-                await process.WaitForExitAsync();
+                int frameSize = width * height * 3;
+                byte[] buffer = new byte[frameSize];
 
-                if (!File.Exists(tempFile))
+                var stream = process.StandardOutput.BaseStream;
+
+                int read = 0;
+                while (read < frameSize)
+                {
+                    int r = await stream.ReadAsync(buffer, read, frameSize - read);
+                    if (r == 0) break;
+                    read += r;
+                }
+
+                if (read != frameSize)
                     return null;
 
-                var bmp = new BitmapImage();
+                var bmp = BitmapSource.Create(
+                    width,
+                    height,
+                    96,
+                    96,
+                    PixelFormats.Bgr24,
+                    null,
+                    buffer,
+                    width * 3);
 
-                using (var stream = File.OpenRead(tempFile))
-                {
-                    bmp.BeginInit();
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.StreamSource = stream;
-                    bmp.EndInit();
-                    bmp.Freeze();
-                }
+                bmp.Freeze();
 
                 return bmp;
             }
             catch
             {
                 return null;
-            }
-            finally
-            {
-                try
-                {
-                    if (File.Exists(tempFile))
-                        File.Delete(tempFile);
-                }
-                catch { }
             }
         }
     }

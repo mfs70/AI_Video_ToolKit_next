@@ -11,6 +11,9 @@ namespace AI_Video_ToolKit.UI.Controls
         private double _duration = 1.0;
         private double _currentTime = 0.0;
 
+        private double _inTime = 0.0;
+        private double _outTime = 0.0;
+
         private bool _isDragging = false;
         private bool _internalUpdate = false;
 
@@ -25,6 +28,7 @@ namespace AI_Video_ToolKit.UI.Controls
         public void SetDuration(double duration)
         {
             _duration = duration;
+            _outTime = duration;
             InvalidateVisual();
         }
 
@@ -38,70 +42,81 @@ namespace AI_Video_ToolKit.UI.Controls
             _internalUpdate = false;
         }
 
+        public void SetInOut(TimeSpan inTime, TimeSpan outTime)
+        {
+            _inTime = inTime.TotalSeconds;
+            _outTime = outTime.TotalSeconds;
+            InvalidateVisual();
+        }
+
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
 
-            double width = ActualWidth;
-            double height = ActualHeight;
+            double w = ActualWidth;
+            double h = ActualHeight;
 
-            dc.DrawRectangle(Brushes.DarkGray, null, new Rect(0, 0, width, height));
+            dc.DrawRectangle(Brushes.Black, null, new Rect(0, 0, w, h));
 
-            double x = (_currentTime / _duration) * width;
+            if (_duration <= 0) return;
 
-            dc.DrawLine(new Pen(Brushes.Red, 2), new Point(x, 0), new Point(x, height));
+            double px(double t) => (t / _duration) * w;
+
+            // IN зона
+            dc.DrawRectangle(
+                new SolidColorBrush(Color.FromArgb(80, 0, 255, 0)),
+                null,
+                new Rect(px(_inTime), 0, px(_outTime) - px(_inTime), h));
+
+            // IN линия
+            dc.DrawLine(new Pen(Brushes.Lime, 2),
+                new Point(px(_inTime), 0),
+                new Point(px(_inTime), h));
+
+            // OUT линия
+            dc.DrawLine(new Pen(Brushes.Red, 2),
+                new Point(px(_outTime), 0),
+                new Point(px(_outTime), h));
+
+            // курсор
+            dc.DrawLine(new Pen(Brushes.White, 2),
+                new Point(px(_currentTime), 0),
+                new Point(px(_currentTime), h));
         }
 
         private void UserControl_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.LeftButton != MouseButtonState.Pressed) return;
-
-            e.Handled = true; // 🔥 КЛЮЧ
-
-            Focus(); // 🔥 важно для WPF
-
             _isDragging = true;
             CaptureMouse();
-
             OnUserInteraction?.Invoke(true);
 
-            UpdatePosition(e.GetPosition(this).X);
+            Update(e.GetPosition(this).X);
         }
 
         private void UserControl_MouseMove(object sender, MouseEventArgs e)
         {
             if (_isDragging)
-            {
-                UpdatePosition(e.GetPosition(this).X);
-            }
+                Update(e.GetPosition(this).X);
         }
 
         private void UserControl_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (!_isDragging) return;
-
             _isDragging = false;
             ReleaseMouseCapture();
-
             OnUserInteraction?.Invoke(false);
-
-            e.Handled = true;
         }
 
-        private void UpdatePosition(double x)
+        private void Update(double x)
         {
-            double width = ActualWidth;
+            double w = ActualWidth;
+            if (w <= 0) return;
 
-            if (width <= 0 || _duration <= 0) return;
-
-            _currentTime = Math.Max(0, Math.Min(_duration, (x / width) * _duration));
+            _currentTime = Math.Max(0, Math.Min(_duration, (x / w) * _duration));
 
             InvalidateVisual();
 
             if (!_internalUpdate)
-            {
                 OnTimeChanged?.Invoke(TimeSpan.FromSeconds(_currentTime));
-            }
         }
     }
 }

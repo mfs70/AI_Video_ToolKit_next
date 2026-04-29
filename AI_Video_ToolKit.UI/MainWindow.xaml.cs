@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Win32;
 using AI_Video_ToolKit.UI.Services;
 
@@ -9,184 +13,226 @@ namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
-        private string? _file;
-
         private readonly BufferedVideoPlayer _player = new();
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
 
+        private List<string> _playlist = new();
+        private int _index = -1;
+
         private double _fps;
         private TimeSpan _currentTime = TimeSpan.Zero;
 
-        private CancellationTokenSource? _seekCts;
+        private TimeSpan _inPoint = TimeSpan.Zero;
+        private TimeSpan _outPoint = TimeSpan.Zero;
 
-        private bool _userInteracting = false;
         private bool _isPlaying = false;
-        private bool _hasActiveSession = false;
-
-        // 🔥 КЛЮЧ
+        private bool _userInteracting = false;
         private bool _seekChangedWhilePaused = false;
+
+        private CancellationTokenSource? _seekCts;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            _player.OnFrame += frame =>
-            {
-                Dispatcher.Invoke(() => Preview.SetFrame(frame));
-            };
+            _player.OnFrame += f =>
+                Dispatcher.Invoke(() => Preview.SetFrame(f));
 
-            _player.OnPositionChanged += time =>
+            _player.OnPositionChanged += t =>
             {
-                _currentTime = time;
+                _currentTime = t;
 
                 if (_userInteracting) return;
 
                 Dispatcher.Invoke(() =>
-                {
-                    Timeline.SetCurrentTime(time);
-                });
+                    Timeline.SetCurrentTime(t));
+
+                HandlePlaybackBounds(t);
             };
 
-            _player.OnPlaybackEnded += () =>
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    if (LoopCheck.IsChecked == true)
-                    {
-                        _currentTime = TimeSpan.Zero;
-                        RestartPlayback();
-                    }
-                    else
-                    {
-                        _isPlaying = false;
-                        _hasActiveSession = false;
-                    }
-                });
-            };
-
-            Timeline.OnUserInteraction += isActive =>
-            {
-                _userInteracting = isActive;
-            };
-
+            Timeline.OnUserInteraction += b => _userInteracting = b;
             Timeline.OnTimeChanged += Timeline_OnTimeChanged;
         }
 
+        // =========================
+        // PLAYBACK BOUNDS (FIX LOOP + PLAYLIST)
+        // =========================
+
+        private void HandlePlaybackBounds(TimeSpan t)
+        {
+            if (_outPoint <= _inPoint) return;
+
+            if (t < _outPoint) return;
+
+            // LOOP
+            if (LoopCheck.IsChecked == true)
+            {
+                _currentTime = _inPoint;
+                RestartPlayback();
+                return;
+            }
+
+            // NEXT FILE
+            if (_index < _playlist.Count - 1)
+            {
+                _index++;
+                Dispatcher.Invoke(async () =>
+                {
+                    RefreshPlaylist();
+                    await LoadCurrent();
+                });
+            }
+            else
+            {
+                _player.Pause();
+                _isPlaying = false;
+            }
+        }
+
+        // =========================
+        // LOAD
+        // =========================
+
         private async void Load_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog();
+            var dlg = new OpenFileDialog { Multiselect = true };
 
             if (dlg.ShowDialog() != true)
                 return;
 
+            _playlist = dlg.FileNames.ToList();
+            _index = 0;
+
+            RefreshPlaylist();
+            await LoadCurrent();
+        }
+
+        private async Task LoadCurrent()
+        {
+            if (_index < 0 || _index >= _playlist.Count)
+                return;
+
+            var file = _playlist[_index];
+
+            FileNameText.Text = Path.GetFileName(file);
+
             _player.Stop();
 
-            _file = dlg.FileName;
-
-            var info = await _ffprobe.GetInfo(_file);
+            var info = await _ffprobe.GetInfo(file);
 
             _fps = info.fps;
 
             _currentTime = TimeSpan.Zero;
-            _isPlaying = true;
-            _hasActiveSession = false;
-            _seekChangedWhilePaused = false;
+            _inPoint = TimeSpan.Zero;
+            _outPoint = TimeSpan.FromSeconds(info.duration);
 
             Timeline.SetDuration(info.duration);
+            Timeline.SetInOut(_inPoint, _outPoint);
             Timeline.SetCurrentTime(TimeSpan.Zero);
 
-            Play();
+            // 🔥 ПОКАЗЫВАЕМ ПЕРВЫЙ КАДР
+            var frame = await _grabber.GetFrame(file, _currentTime, 1280, 720);
+            if (frame != null)
+                Preview.SetFrame(frame);
+
+            _isPlaying = true;
+            StartPlayback();
         }
 
-        private void Play_Click(object sender, RoutedEventArgs e)
+        private void RefreshPlaylist()
         {
-            if (_file == null) return;
+            PlaylistBox.ItemsSource = null;
+            PlaylistBox.ItemsSource = _playlist.Select(Path.GetFileName);
+            PlaylistBox.SelectedIndex = _index;
+        }
 
-            // 🔥 ЕСЛИ БЫЛ SEEK В ПАУЗЕ → СТАРТ С НОВОЙ ПОЗИЦИИ
+        // =========================
+        // PLAY CONTROL (FIX)
+        // =========================
+
+        private void TogglePlayPause_Click(object sender, RoutedEventArgs e)
+        {
+            if (_index < 0) return;
+
+            if (_isPlaying)
+            {
+                _player.Pause();
+                _isPlaying = false;
+                return;
+            }
+
+            // 🔥 если был seek — только restart
             if (_seekChangedWhilePaused)
             {
                 _seekChangedWhilePaused = false;
-                Play();
+                RestartPlayback();
                 return;
             }
 
-            // 🔥 ОБЫЧНЫЙ RESUME
-            if (_hasActiveSession && !_isPlaying)
-            {
-                _isPlaying = true;
-                _player.Resume();
-                return;
-            }
-
-            Play();
-        }
-
-        private void Play()
-        {
-            if (_file == null) return;
-
+            _player.Resume();
             _isPlaying = true;
-            _hasActiveSession = true;
-
-            _player.Start(_file, 1280, 720, _fps, _currentTime);
         }
 
-        private void Pause_Click(object sender, RoutedEventArgs e)
+        private void StartPlayback()
         {
-            _isPlaying = false;
-            _player.Pause();
-        }
-
-        private void Stop_Click(object sender, RoutedEventArgs e)
-        {
-            _isPlaying = false;
-            _hasActiveSession = false;
-
-            _player.Stop();
-            _currentTime = TimeSpan.Zero;
-
-            Timeline.SetCurrentTime(TimeSpan.Zero);
-        }
-
-        private void Prev_Click(object sender, RoutedEventArgs e)
-        {
-            _currentTime = TimeSpan.Zero;
-            RestartPlayback();
-        }
-
-        private void Next_Click(object sender, RoutedEventArgs e)
-        {
-            _currentTime = TimeSpan.Zero;
-            RestartPlayback();
+            _player.Start(_playlist[_index], 1280, 720, _fps, _currentTime);
         }
 
         private void RestartPlayback()
         {
-            if (_file == null) return;
-
             _player.Stop();
-            _player.Start(_file, 1280, 720, _fps, _currentTime);
+            _player.Start(_playlist[_index], 1280, 720, _fps, _currentTime);
+        }
 
-            _hasActiveSession = true;
+        private void Stop_Click(object sender, RoutedEventArgs e)
+        {
+            _player.Stop();
+            _isPlaying = false;
+            _currentTime = TimeSpan.Zero;
 
-            if (!_isPlaying)
+            Timeline.SetCurrentTime(_currentTime);
+        }
+
+        private void Prev_Click(object sender, RoutedEventArgs e)
+        {
+            if (_index > 0)
             {
-                _player.Pause();
+                _index--;
+                RefreshPlaylist();
+                _ = LoadCurrent();
             }
         }
 
+        private void Next_Click(object sender, RoutedEventArgs e)
+        {
+            if (_index < _playlist.Count - 1)
+            {
+                _index++;
+                RefreshPlaylist();
+                _ = LoadCurrent();
+            }
+        }
+
+        private void PlaylistBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (PlaylistBox.SelectedIndex >= 0)
+            {
+                _index = PlaylistBox.SelectedIndex;
+                _ = LoadCurrent();
+            }
+        }
+
+        // =========================
+        // TIMELINE (FIX)
+        // =========================
+
         private void Timeline_OnTimeChanged(TimeSpan time)
         {
-            if (_file == null) return;
-
             _currentTime = time;
 
-            // 🔥 фикс
             if (!_isPlaying)
-            {
                 _seekChangedWhilePaused = true;
-            }
 
             _seekCts?.Cancel();
             _seekCts = new CancellationTokenSource();
@@ -203,14 +249,15 @@ namespace AI_Video_ToolKit.UI
 
                     if (_isPlaying)
                     {
-                        Dispatcher.Invoke(() =>
-                        {
-                            RestartPlayback();
-                        });
+                        Dispatcher.Invoke(RestartPlayback);
                     }
                     else
                     {
-                        var frame = await _grabber.GetFrame(_file, _currentTime, 1280, 720);
+                        var frame = await _grabber.GetFrame(
+                            _playlist[_index],
+                            _currentTime,
+                            1280,
+                            720);
 
                         if (frame != null)
                         {
@@ -224,6 +271,99 @@ namespace AI_Video_ToolKit.UI
                 }
                 catch { }
             });
+        }
+
+        // =========================
+        // HOTKEYS
+        // =========================
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (_index < 0) return;
+
+            if (e.Key == Key.Space)
+            {
+                TogglePlayPause_Click(null, null);
+                e.Handled = true;
+            }
+
+            if (e.Key == Key.Left)
+            {
+                StepFrame(-1);
+                e.Handled = true;
+            }
+
+            if (e.Key == Key.Right)
+            {
+                StepFrame(1);
+                e.Handled = true;
+            }
+
+            if (e.Key == Key.I)
+            {
+                _inPoint = _currentTime;
+                Timeline.SetInOut(_inPoint, _outPoint);
+            }
+
+            if (e.Key == Key.O)
+            {
+                _outPoint = _currentTime;
+                Timeline.SetInOut(_inPoint, _outPoint);
+            }
+        }
+
+        private async void StepFrame(int dir)
+        {
+            if (_fps <= 0) return;
+
+            _currentTime += TimeSpan.FromSeconds(dir * (1.0 / _fps));
+
+            if (_currentTime < _inPoint) _currentTime = _inPoint;
+            if (_currentTime > _outPoint) _currentTime = _outPoint;
+
+            _player.Pause();
+            _isPlaying = false;
+            _seekChangedWhilePaused = true;
+
+            var frame = await _grabber.GetFrame(
+                _playlist[_index],
+                _currentTime,
+                1280,
+                720);
+
+            if (frame != null)
+            {
+                Preview.SetFrame(frame);
+                Timeline.SetCurrentTime(_currentTime);
+            }
+        }
+
+        // =========================
+        // DRAG & DROP (FIX FOLDERS)
+        // =========================
+
+        private async void Window_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] items)
+            {
+                var files = new List<string>();
+
+                foreach (var item in items)
+                {
+                    if (File.Exists(item))
+                        files.Add(item);
+
+                    if (Directory.Exists(item))
+                        files.AddRange(
+                            Directory.GetFiles(item, "*.*", SearchOption.AllDirectories));
+                }
+
+                _playlist = files;
+                _index = 0;
+
+                RefreshPlaylist();
+                await LoadCurrent();
+            }
         }
     }
 }
