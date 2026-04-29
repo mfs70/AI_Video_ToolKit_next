@@ -1,12 +1,10 @@
 <UserControl x:Class="AI_Video_ToolKit.UI.Controls.TimelineControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             PreviewMouseDown="UserControl_MouseDown"
+             PreviewMouseMove="UserControl_MouseMove"
+             PreviewMouseUp="UserControl_MouseUp">
 
-    <Grid Margin="10">
-
-        <Canvas x:Name="TimelineCanvas"
-                Height="60"
-                Background="#222"
-                MouseDown="Canvas_MouseDown"/>
-    </Grid>
+    <Grid Background="Transparent"/>
 </UserControl>

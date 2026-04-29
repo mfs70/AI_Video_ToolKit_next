@@ -1,29 +1,38 @@
 <Window x:Class="AI_Video_ToolKit.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:AI_Video_ToolKit.UI.Controls"
-        Title="AI Video Toolkit"
-        Height="800"
-        Width="1200">
+        xmlns:ctrls="clr-namespace:AI_Video_ToolKit.UI.Controls"
+        Title="AI Video Toolkit" Height="600" Width="1000">
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="80"/>
             <RowDefinition Height="120"/>
-            <RowDefinition Height="100"/>
         </Grid.RowDefinitions>
 
         <!-- Preview -->
-        <local:VideoPreviewControl x:Name="Preview"/>
+        <ctrls:VideoPreviewControl x:Name="Preview" Grid.Row="0"/>
 
-        <!-- 🔥 КЛЮЧЕВОЙ ФИКС -->
-        <local:TimelineControl x:Name="Timeline"
-                               Grid.Row="1"/>
+        <!-- Timeline -->
+        <ctrls:TimelineControl x:Name="Timeline" Grid.Row="1"/>
 
         <!-- Controls -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal">
-            <Button Content="Load Video" Click="Load_Click" Width="120"/>
-            <Button Content="Stop" Click="Stop_Click" Width="120"/>
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
+            <Button Content="Load" Click="Load_Click" Width="80" Margin="5"/>
+
+            <Button Content="⏮" Click="Prev_Click" Width="60" Margin="5"/>
+            <Button Content="▶" Click="Play_Click" Width="60" Margin="5"/>
+            <Button Content="⏸" Click="Pause_Click" Width="60" Margin="5"/>
+            <Button Content="⏹" Click="Stop_Click" Width="60" Margin="5"/>
+            <Button Content="⏭" Click="Next_Click" Width="60" Margin="5"/>
+
+            <CheckBox x:Name="LoopCheck" Content="Loop" Margin="10,5"/>
+
         </StackPanel>
     </Grid>
 </Window>

@@ -3,61 +3,105 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Shapes;
 
 namespace AI_Video_ToolKit.UI.Controls
 {
     public partial class TimelineControl : UserControl
     {
+        private double _duration = 1.0;
+        private double _currentTime = 0.0;
+
+        private bool _isDragging = false;
+        private bool _internalUpdate = false;
+
         public event Action<TimeSpan>? OnTimeChanged;
-
-        private double _duration = 100;
-
-        private Line _playhead = new() { Stroke = Brushes.White, StrokeThickness = 2 };
-
-        private bool _dragging;
+        public event Action<bool>? OnUserInteraction;
 
         public TimelineControl()
         {
             InitializeComponent();
-
-            TimelineCanvas.Children.Add(_playhead);
         }
 
-        public void SetDuration(double seconds)
+        public void SetDuration(double duration)
         {
-            _duration = seconds;
+            _duration = duration;
+            InvalidateVisual();
         }
 
-        private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
+        public void SetCurrentTime(TimeSpan time)
         {
-            _dragging = true;
-            Update(e);
+            if (_isDragging) return;
+
+            _internalUpdate = true;
+            _currentTime = time.TotalSeconds;
+            InvalidateVisual();
+            _internalUpdate = false;
         }
 
-        private void Canvas_MouseMove(object sender, MouseEventArgs e)
+        protected override void OnRender(DrawingContext dc)
         {
-            if (_dragging)
-                Update(e);
+            base.OnRender(dc);
+
+            double width = ActualWidth;
+            double height = ActualHeight;
+
+            dc.DrawRectangle(Brushes.DarkGray, null, new Rect(0, 0, width, height));
+
+            double x = (_currentTime / _duration) * width;
+
+            dc.DrawLine(new Pen(Brushes.Red, 2), new Point(x, 0), new Point(x, height));
         }
 
-        private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
+        private void UserControl_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            _dragging = false;
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+
+            e.Handled = true; // 🔥 КЛЮЧ
+
+            Focus(); // 🔥 важно для WPF
+
+            _isDragging = true;
+            CaptureMouse();
+
+            OnUserInteraction?.Invoke(true);
+
+            UpdatePosition(e.GetPosition(this).X);
         }
 
-        private void Update(MouseEventArgs e)
+        private void UserControl_MouseMove(object sender, MouseEventArgs e)
         {
-            var pos = e.GetPosition(TimelineCanvas);
+            if (_isDragging)
+            {
+                UpdatePosition(e.GetPosition(this).X);
+            }
+        }
 
-            double time = (pos.X / TimelineCanvas.ActualWidth) * _duration;
+        private void UserControl_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isDragging) return;
 
-            OnTimeChanged?.Invoke(TimeSpan.FromSeconds(time));
+            _isDragging = false;
+            ReleaseMouseCapture();
 
-            _playhead.X1 = pos.X;
-            _playhead.X2 = pos.X;
-            _playhead.Y1 = 0;
-            _playhead.Y2 = TimelineCanvas.Height;
+            OnUserInteraction?.Invoke(false);
+
+            e.Handled = true;
+        }
+
+        private void UpdatePosition(double x)
+        {
+            double width = ActualWidth;
+
+            if (width <= 0 || _duration <= 0) return;
+
+            _currentTime = Math.Max(0, Math.Min(_duration, (x / width) * _duration));
+
+            InvalidateVisual();
+
+            if (!_internalUpdate)
+            {
+                OnTimeChanged?.Invoke(TimeSpan.FromSeconds(_currentTime));
+            }
         }
     }
 }
