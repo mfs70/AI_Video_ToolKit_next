@@ -3,15 +3,82 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ctrls="clr-namespace:AI_Video_ToolKit.UI.Controls"
         Title="AI Video Toolkit"
-        Height="700"
+        Height="720"
         Width="1200"
+        Background="#1E1E1E"
+        PreviewKeyDown="Window_KeyDown"
+        Focusable="True"
         AllowDrop="True"
-        Drop="Window_Drop"
-        PreviewKeyDown="Window_KeyDown">
+        Drop="Window_Drop">
+
+    <Window.Resources>
+
+        <!-- ===== BUTTON STYLE ===== -->
+        <Style x:Key="PrimaryButton"
+                TargetType="Button">
+            <Setter Property="Width"
+                    Value="130"/>
+            <Setter Property="Height"
+                    Value="44"/>
+            <Setter Property="Margin"
+                    Value="6"/>
+            <Setter Property="FontSize"
+                    Value="14"/>
+            <Setter Property="Foreground"
+                    Value="White"/>
+            <Setter Property="Background"
+                    Value="#2D2D30"/>
+            <Setter Property="BorderBrush"
+                    Value="#3E3E42"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                CornerRadius="6"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                    Value="True">
+                                <Setter TargetName="Root"
+                                        Property="Background"
+                                        Value="#3A3A3F"/>
+                            </Trigger>
+
+                            <Trigger Property="IsPressed"
+                                    Value="True">
+                                <Setter TargetName="Root"
+                                        Property="Background"
+                                        Value="#007ACC"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled"
+                                    Value="False">
+                                <Setter TargetName="Root"
+                                        Property="Opacity"
+                                        Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250"/>
+            <ColumnDefinition Width="260"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
@@ -24,21 +91,18 @@
         <!-- PLAYLIST -->
         <Border Grid.RowSpan="3"
                 Grid.Column="0"
-                Background="#111">
-            <StackPanel>
-                <TextBlock Text="Playlist"
-                           Foreground="White"
-                           Margin="10"/>
-
-                <ListBox x:Name="PlaylistBox"
-                         SelectionChanged="PlaylistBox_SelectionChanged"
-                         Background="#222"
-                         Foreground="White"/>
-            </StackPanel>
+                Background="#2A2A2A">
+            <ListBox x:Name="PlaylistBox"
+                     Background="#2A2A2A"
+                     Foreground="White"
+                     BorderThickness="0"
+                     SelectionChanged="PlaylistBox_SelectionChanged"/>
         </Border>
 
         <!-- PREVIEW -->
-        <Border Grid.Column="1" Grid.Row="0" Background="Black">
+        <Border Grid.Column="1"
+                Grid.Row="0"
+                Background="Black">
             <ctrls:VideoPreviewControl x:Name="Preview"/>
         </Border>
 
@@ -50,29 +114,45 @@
         <!-- CONTROLS -->
         <StackPanel Grid.Column="1"
                     Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Center"
+                    Orientation="Vertical"
                     VerticalAlignment="Center">
 
-            <Button Content="Load" Click="Load_Click" Margin="5"/>
+            <!-- КНОПКИ (ФИКСИРОВАНЫ) -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center">
 
-            <Button Content="⏮" Click="Prev_Click" Margin="5"/>
+                <Button Style="{StaticResource PrimaryButton}"
+                        Content="Load (L)"
+                        Click="Load_Click"/>
 
-            <Button Content="Play/Pause"
-                    Click="TogglePlayPause_Click"
-                    Margin="5"/>
+                <Button Style="{StaticResource PrimaryButton}"
+                        Content="Play / Pause"
+                        Click="TogglePlayPause_Click"/>
 
-            <Button Content="⏹" Click="Stop_Click" Margin="5"/>
+                <Button Style="{StaticResource PrimaryButton}"
+                        Content="Stop (S)"
+                        Click="Stop_Click"/>
 
-            <Button Content="⏭" Click="Next_Click" Margin="5"/>
+                <CheckBox x:Name="LoopCheck"
+                          Content="Loop (R)"
+                          Foreground="White"
+                          Margin="20,0"
+                          VerticalAlignment="Center"/>
+            </StackPanel>
 
-            <CheckBox x:Name="LoopCheck"
-                      Content="Loop"
-                      Margin="10,5"/>
+            <!-- ИМЯ ФАЙЛА (ОТДЕЛЬНО, НЕ ДВИГАЕТ UI) -->
+            <Border Margin="10,10,10,0"
+                    Padding="8"
+                    Background="#252526"
+                    CornerRadius="4"
+                    HorizontalAlignment="Stretch">
 
-            <TextBlock x:Name="FileNameText"
-                       Foreground="White"
-                       Margin="20,5"/>
+                <TextBlock x:Name="FileNameText"
+                           Foreground="#CCCCCC"
+                           FontSize="13"
+                           TextTrimming="CharacterEllipsis"/>
+            </Border>
+
         </StackPanel>
     </Grid>
 </Window>
