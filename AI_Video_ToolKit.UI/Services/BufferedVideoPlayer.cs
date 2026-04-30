@@ -17,6 +17,7 @@ namespace AI_Video_ToolKit.UI.Services
         private int _width;
         private int _height;
         private double _fps;
+        private double _speed = 1.0;
 
         private volatile bool _isPaused;
 
@@ -28,13 +29,14 @@ namespace AI_Video_ToolKit.UI.Services
         public event Action<TimeSpan>? OnPositionChanged;
         public event Action? OnPlaybackEnded;
 
-        public void Start(string file, int width, int height, double fps, TimeSpan start)
+        public void Start(string file, int width, int height, double fps, TimeSpan start, double speed = 1.0)
         {
             Stop();
 
             _width = width;
             _height = height;
             _fps = fps <= 0 ? 25 : fps;
+            _speed = speed;
 
             _startTime = start;
             _pauseOffset = TimeSpan.Zero;
@@ -77,7 +79,7 @@ namespace AI_Video_ToolKit.UI.Services
             int frameSize = _width * _height * 3;
             byte[] buffer = new byte[frameSize];
 
-            double frameTimeMs = 1000.0 / _fps;
+            double frameTimeMs = 1000.0 / (_fps * _speed);
 
             try
             {
@@ -101,7 +103,7 @@ namespace AI_Video_ToolKit.UI.Services
                         read += r;
                     }
 
-                    var frameTime = _startTime + _pauseOffset + _clock.Elapsed;
+                    var current = _startTime + _pauseOffset + _clock.Elapsed;
 
                     var bmp = BitmapSource.Create(
                         _width,
@@ -116,7 +118,7 @@ namespace AI_Video_ToolKit.UI.Services
                     bmp.Freeze();
 
                     OnFrame?.Invoke(bmp);
-                    OnPositionChanged?.Invoke(frameTime);
+                    OnPositionChanged?.Invoke(current);
 
                     await Task.Delay((int)frameTimeMs, token);
                 }
@@ -130,7 +132,6 @@ namespace AI_Video_ToolKit.UI.Services
 
             _pauseOffset += _clock.Elapsed;
             _clock.Reset();
-
             _isPaused = true;
         }
 

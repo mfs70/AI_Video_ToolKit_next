@@ -5,12 +5,26 @@ PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet build
   AI_Video_ToolKit.Infrastructure -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Infrastructure\bin\Debug\net8.0\AI_Video_ToolKit.I
   nfrastructure.dll
   AI_Video_ToolKit.Core -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Core\bin\Debug\net8.0\AI_Video_ToolKit.Core.dll
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(91,17): error CS0103: Имя "FileNameText" не существует в текущем 
-контексте. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_qhna53as_wpftmp.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(56,108): error CS1061: "MainWindow" не содержит определения "Load_Cl
+ick", и не удалось найти доступный метод расширения "Load_Click", принимающий тип "MainWindow" в качестве первого аргумента (возм 
+ожно, пропущена директива using или ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h 
+_wpftmp.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(17,24): warning CS0169: Поле "MainWindow._duration" никогда не ис 
+пользуется. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h_wpftmp.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(16,25): warning CS0649: Полю "MainWindow._file" нигде не присваив 
+ается значение, поэтому оно всегда будет иметь значение по умолчанию null. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video 
+_ToolKit.UI_afoom33h_wpftmp.csproj]
 
 Ошибка сборки.
 
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(91,17): error CS0103: Имя "FileNameText" не существует в текущем  
-контексте. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_qhna53as_wpftmp.csproj]
-    Предупреждений: 0
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(17,24): warning CS0169: Поле "MainWindow._duration" никогда не ис 
+пользуется. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h_wpftmp.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(16,25): warning CS0649: Полю "MainWindow._file" нигде не присваив 
+ается значение, поэтому оно всегда будет иметь значение по умолчанию null. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video 
+_ToolKit.UI_afoom33h_wpftmp.csproj]
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(56,108): error CS1061: "MainWindow" не содержит определения "Load_Cl 
+ick", и не удалось найти доступный метод расширения "Load_Click", принимающий тип "MainWindow" в качестве первого аргумента (возм 
+ожно, пропущена директива using или ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h 
+_wpftmp.csproj]
+    Предупреждений: 2
     Ошибок: 1
