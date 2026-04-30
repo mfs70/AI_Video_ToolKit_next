@@ -48,14 +48,73 @@ namespace AI_Video_ToolKit.UI
 
                     _current = TimeSpan.Zero;
                     Timeline.SetCurrentTime(_current);
-
                     SetIdleState();
                 });
             };
 
             Timeline.OnChanged += Timeline_Changed;
+        }
 
-            Loaded += (_, __) => Keyboard.Focus(this);
+        // ================= HOTKEY CORE =================
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // 🔥 ГЛАВНОЕ: блокируем кнопки
+            e.Handled = true;
+
+            if (e.Key == Key.Space)
+                TogglePlayPause_Click(null, null);
+
+            if (e.Key == Key.L)
+                Load_Click(null, null);
+
+            if (e.Key == Key.S)
+                Stop_Click(null, null);
+
+            if (e.Key == Key.R)
+                LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false);
+
+            // ▶ стрелки (frame step)
+            if (e.Key == Key.Right)
+                StepFrames(1);
+
+            if (e.Key == Key.Left)
+                StepFrames(-1);
+
+            // ▶ Shift + стрелки (быстрый шаг)
+            if (Keyboard.Modifiers == ModifierKeys.Shift && e.Key == Key.Right)
+                StepFrames(10);
+
+            if (Keyboard.Modifiers == ModifierKeys.Shift && e.Key == Key.Left)
+                StepFrames(-10);
+        }
+
+        private void StepFrames(int frames)
+        {
+            if (_file == null) return;
+
+            double fps = 25; // можно позже взять из ffprobe
+            double step = frames / fps;
+
+            _current += TimeSpan.FromSeconds(step);
+
+            if (_current < TimeSpan.Zero)
+                _current = TimeSpan.Zero;
+
+            if (_current.TotalSeconds > _duration)
+                _current = TimeSpan.FromSeconds(_duration);
+
+            Timeline.SetCurrentTime(_current);
+
+            _ = ShowFrame();
+        }
+
+        private async System.Threading.Tasks.Task ShowFrame()
+        {
+            if (_file == null) return;
+
+            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
+            Preview.SetFrame(frame);
         }
 
         // ================= LOAD =================
@@ -77,8 +136,7 @@ namespace AI_Video_ToolKit.UI
             Timeline.SetDuration(_duration);
             Timeline.SetCurrentTime(_current);
 
-            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
-            Preview.SetFrame(frame);
+            await ShowFrame();
 
             FileNameText.Text = Path.GetFileName(_file);
 
@@ -92,10 +150,9 @@ namespace AI_Video_ToolKit.UI
             if (_file == null) return;
 
             _player.Stop();
-
             _current = time;
 
-            _player.Start(_file, 1280, 720, 0, _current);
+            _player.Start(_file, 1280, 720, 25, _current);
 
             _isPlaying = true;
             _isPaused = false;
@@ -107,31 +164,26 @@ namespace AI_Video_ToolKit.UI
         {
             if (_file == null) return;
 
-            // старт
             if (!_isPlaying && !_isPaused)
             {
                 PlayFrom(_current);
                 return;
             }
 
-            // пауза
             if (_isPlaying)
             {
                 _player.Pause();
                 _isPlaying = false;
                 _isPaused = true;
-
                 SetPauseState();
                 return;
             }
 
-            // resume
             if (_isPaused)
             {
                 _player.Resume();
                 _isPaused = false;
                 _isPlaying = true;
-
                 SetPlayState();
             }
         }
@@ -144,6 +196,7 @@ namespace AI_Video_ToolKit.UI
 
             Timeline.SetCurrentTime(_current);
             Preview.SetFrame(null);
+
             FileNameText.Text = "";
 
             SetIdleState();
@@ -156,28 +209,23 @@ namespace AI_Video_ToolKit.UI
             _current = time;
 
             if (_isPlaying)
-            {
                 PlayFrom(_current);
-            }
-            else if (_file != null)
-            {
-                var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
-                Preview.SetFrame(frame);
-            }
+            else
+                await ShowFrame();
         }
 
         // ================= UI =================
 
         private void SetPlayState()
         {
-            PlayButton.Content = "Play";
-            PlayButton.Foreground = System.Windows.Media.Brushes.Green;
+            PlayIcon.Text = "⏸";
+            PlayIcon.Foreground = System.Windows.Media.Brushes.Green;
         }
 
         private void SetPauseState()
         {
-            PlayButton.Content = "Pause";
-            PlayButton.Foreground = System.Windows.Media.Brushes.Yellow;
+            PlayIcon.Text = "▶";
+            PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow;
         }
 
         private void SetIdleState()
@@ -185,25 +233,8 @@ namespace AI_Video_ToolKit.UI
             _isPlaying = false;
             _isPaused = false;
 
-            PlayButton.Content = "Play";
-            PlayButton.Foreground = System.Windows.Media.Brushes.White;
-        }
-
-        // ================= HOTKEY =================
-
-        private void Window_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Space)
-                TogglePlayPause_Click(null, null);
-
-            if (e.Key == Key.L)
-                Load_Click(null, null);
-
-            if (e.Key == Key.S)
-                Stop_Click(null, null);
-
-            if (e.Key == Key.R)
-                LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false);
+            PlayIcon.Text = "▶";
+            PlayIcon.Foreground = System.Windows.Media.Brushes.White;
         }
 
         private void Window_Drop(object? sender, DragEventArgs e) { }
