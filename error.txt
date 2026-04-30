@@ -5,17 +5,12 @@ PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet build
   AI_Video_ToolKit.Infrastructure -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Infrastructure\bin\Debug\net8.0\AI_Video_ToolKit.I
   nfrastructure.dll
   AI_Video_ToolKit.Core -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Core\bin\Debug\net8.0\AI_Video_ToolKit.Core.dll
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\Services\FrameGrabber.cs(32,19): warning CS8602: Разыменование вероятной пустой ссыл
-ки. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_s0bh5dvf_wpftmp.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\Services\FrameGrabber.cs(32,19): warning CS8602: Разыменование вероятной пустой ссыл
-ки. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-  AI_Video_ToolKit.UI -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\bin\Debug\net8.0-windows\AI_Video_ToolKit.UI.dll
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(91,17): error CS0103: Имя "FileNameText" не существует в текущем 
+контексте. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_qhna53as_wpftmp.csproj]
 
-Сборка успешно завершена.
+Ошибка сборки.
 
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\Services\FrameGrabber.cs(32,19): warning CS8602: Разыменование вероятной пустой ссыл 
-ки. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_s0bh5dvf_wpftmp.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\Services\FrameGrabber.cs(32,19): warning CS8602: Разыменование вероятной пустой ссыл 
-ки. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj]
-    Предупреждений: 2
-    Ошибок: 0
+D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(91,17): error CS0103: Имя "FileNameText" не существует в текущем  
+контексте. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_qhna53as_wpftmp.csproj]
+    Предупреждений: 0
+    Ошибок: 1
