@@ -71,7 +71,12 @@ namespace AI_Video_ToolKit.UI
 
         private async void Load_Click(object? sender, RoutedEventArgs? e)
         {
-            var dlg = new OpenFileDialog();
+            var dlg = new OpenFileDialog
+            {
+                Title = "Выберите видеофайл",
+                Filter = "Видео (*.mp4;*.mkv;*.mov;*.avi)|*.mp4;*.mkv;*.mov;*.avi|Все файлы (*.*)|*.*"
+            };
+
             if (dlg.ShowDialog() != true) return;
 
             _player.Stop();
@@ -224,9 +229,8 @@ namespace AI_Video_ToolKit.UI
             _current = TimeSpan.Zero;
 
             Timeline.SetCurrentTime(_current);
-            Preview.SetFrame(null);
 
-            FileNameText.Text = "";
+            _ = ShowFrame();
 
             SetIdleState();
         }
@@ -258,10 +262,12 @@ namespace AI_Video_ToolKit.UI
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            e.Handled = true;
-
             if (e.Key == Key.Space)
+            {
                 TogglePlayPause_Click(null, null);
+                e.Handled = true;
+                return;
+            }
 
             if (e.Key == Key.K)
             {
@@ -269,31 +275,89 @@ namespace AI_Video_ToolKit.UI
                 _isPlaying = false;
                 _isPaused = true;
                 SetPauseState();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                Load_Click(null, null);
+                e.Handled = true;
+                return;
             }
 
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None)
+            {
                 IncreaseSpeed();
+                e.Handled = true;
+                return;
+            }
 
             if (e.Key == Key.J)
+            {
                 ResetSpeed();
+                e.Handled = true;
+                return;
+            }
 
             if (e.Key == Key.Right)
+            {
                 Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1);
+                e.Handled = true;
+                return;
+            }
 
             if (e.Key == Key.Left)
+            {
                 Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1);
+                e.Handled = true;
+                return;
+            }
 
             if (e.Key == Key.S)
+            {
                 Stop_Click(null, null);
+                e.Handled = true;
+                return;
+            }
 
             if (e.Key == Key.R)
+            {
                 LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false);
-
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
-                Load_Click(null, null);
+                e.Handled = true;
+            }
         }
 
-        private void Window_Drop(object? sender, DragEventArgs e) { }
+        private async void Window_Drop(object? sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+                return;
+
+            if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
+                return;
+
+            var first = files[0];
+            if (Directory.Exists(first))
+                return;
+
+            var ext = Path.GetExtension(first).ToLowerInvariant();
+            if (ext is not ".mp4" and not ".mkv" and not ".mov" and not ".avi")
+                return;
+
+            _player.Stop();
+            _file = first;
+
+            var info = await _ffprobe.GetInfo(_file);
+            _duration = info.duration;
+            _current = TimeSpan.Zero;
+
+            Timeline.SetDuration(_duration);
+            Timeline.SetCurrentTime(_current);
+            await ShowFrame();
+
+            FileNameText.Text = Path.GetFileName(_file);
+            SetIdleState();
+        }
         private void PlaylistBox_SelectionChanged(object? sender, System.Windows.Controls.SelectionChangedEventArgs e) { }
     }
 }
