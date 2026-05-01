@@ -16,6 +16,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- VIDEO -->
@@ -24,19 +25,18 @@
                                       Margin="10"/>
 
         <!-- FILE + SPEED -->
-        <Grid Grid.Row="1" Margin="10,5">
+        <Grid Grid.Row="1"
+                Margin="10,5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- имя файла -->
             <TextBlock x:Name="FileNameText"
                        Foreground="White"
                        FontSize="14"
                        VerticalAlignment="Center"/>
 
-            <!-- скорость -->
             <TextBlock x:Name="SpeedText"
                        Grid.Column="1"
                        Foreground="Orange"
@@ -46,15 +46,34 @@
                        Text="x1"/>
         </Grid>
 
-        <!-- CONTROLS -->
+        <!-- INFO (СТОЛБИКОМ) -->
         <StackPanel Grid.Row="2"
+                    Orientation="Vertical"
+                    Margin="10,0,10,5">
+
+            <TextBlock x:Name="ResolutionText"
+                       Foreground="#AAAAAA"
+                       Margin="0,0,0,2"/>
+
+            <TextBlock x:Name="FpsText"
+                       Foreground="#AAAAAA"
+                       Margin="0,0,0,2"/>
+
+            <TextBlock x:Name="CodecText"
+                       Foreground="#AAAAAA"
+                       Margin="0,0,0,2"/>
+
+            <TextBlock x:Name="DurationText"
+                       Foreground="#AAAAAA"/>
+        </StackPanel>
+
+        <!-- CONTROLS -->
+        <StackPanel Grid.Row="3"
                     Orientation="Horizontal"
                     HorizontalAlignment="Center"
                     Margin="0,10">
 
-            <!-- PLAY / PAUSE -->
-            <Button x:Name="PlayButton"
-                    Width="80"
+            <Button Width="80"
                     Height="40"
                     Margin="5"
                     Click="TogglePlayPause_Click">
@@ -66,30 +85,23 @@
                            VerticalAlignment="Center"/>
             </Button>
 
-            <!-- STOP -->
             <Button Width="80"
                     Height="40"
                     Margin="5"
                     Click="Stop_Click">
                 <TextBlock Text="■"
-                           FontSize="18"
-                           Foreground="White"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                        FontSize="18"
+                        Foreground="White"/>
             </Button>
 
-            <!-- LOAD -->
             <Button Width="80"
                     Height="40"
                     Margin="5"
                     Click="Load_Click">
                 <TextBlock Text="📂"
-                           FontSize="18"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                        FontSize="18"/>
             </Button>
 
-            <!-- LOOP -->
             <CheckBox x:Name="LoopCheck"
                       Content="Loop"
                       Foreground="White"
@@ -99,7 +111,7 @@
 
         <!-- TIMELINE -->
         <controls:TimelineControl x:Name="Timeline"
-                                 Grid.Row="3"
-                                 Margin="10"/>
+                                  Grid.Row="4"
+                                  Margin="10"/>
     </Grid>
 </Window>

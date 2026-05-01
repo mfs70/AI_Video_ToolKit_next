@@ -1,84 +1,116 @@
+using System;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace AI_Video_ToolKit.UI.Services
 {
     public class FFprobeService
     {
-        private const string FFprobePath = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
+        private const string FFPROBE_PATH = @"C:\_Portable_\FFMPEG\bin\ffprobe.exe";
 
-        public async Task<(int width, int height, double duration, double fps, bool hasAudio)> GetInfo(string file)
+        public async Task<(int width, int height, double duration, double fps, bool hasAudio, string codec)> GetInfo(string file)
         {
-            var psi = new ProcessStartInfo
+            try
             {
-                FileName = FFprobePath,
-                Arguments =
-                    "-v error -select_streams v:0 " +
-                    "-show_entries stream=width,height,r_frame_rate " +
-                    "-show_entries format=duration " +
-                    "-of default=noprint_wrappers=1 " +
-                    $"\"{file}\"",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var psiAudio = new ProcessStartInfo
-            {
-                FileName = FFprobePath,
-                Arguments =
-                    "-v error -select_streams a " +
-                    "-show_entries stream=index " +
-                    "-of csv=p=0 " +
-                    $"\"{file}\"",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var process = Process.Start(psi)!;
-            string output = await process.StandardOutput.ReadToEndAsync();
-            process.WaitForExit();
-
-            var processAudio = Process.Start(psiAudio)!;
-            string audioOutput = await processAudio.StandardOutput.ReadToEndAsync();
-            processAudio.WaitForExit();
-
-            bool hasAudio = !string.IsNullOrWhiteSpace(audioOutput);
-
-            int width = 640;
-            int height = 360;
-            double duration = 0;
-            double fps = 30;
-
-            foreach (var line in output.Split('\n'))
-            {
-                if (line.StartsWith("width="))
-                    width = int.Parse(line.Replace("width=", ""));
-
-                if (line.StartsWith("height="))
-                    height = int.Parse(line.Replace("height=", ""));
-
-                if (line.StartsWith("duration="))
-                    double.TryParse(line.Replace("duration=", ""), NumberStyles.Any, CultureInfo.InvariantCulture, out duration);
-
-                if (line.StartsWith("r_frame_rate="))
+                var psi = new ProcessStartInfo
                 {
-                    var val = line.Replace("r_frame_rate=", "");
-                    var parts = val.Split('/');
+                    FileName = FFPROBE_PATH,
+                    Arguments = $"-v quiet -print_format json -show_streams -show_format \"{file}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
 
-                    if (parts.Length == 2 &&
-                        double.TryParse(parts[0], out var num) &&
-                        double.TryParse(parts[1], out var den) &&
-                        den != 0)
+                using var process = Process.Start(psi);
+                if (process == null)
+                    return Default();
+
+                string json = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+
+                if (string.IsNullOrWhiteSpace(json))
+                    return Default();
+
+                using var doc = JsonDocument.Parse(json);
+
+                int width = 0;
+                int height = 0;
+                double duration = 0;
+                double fps = 25;
+                bool hasAudio = false;
+                string codec = "unknown";
+
+                if (doc.RootElement.TryGetProperty("streams", out var streams))
+                {
+                    foreach (var stream in streams.EnumerateArray())
                     {
-                        fps = num / den;
+                        var type = stream.GetProperty("codec_type").GetString();
+
+                        if (type == "video")
+                        {
+                            if (stream.TryGetProperty("width", out var w))
+                                width = w.GetInt32();
+
+                            if (stream.TryGetProperty("height", out var h))
+                                height = h.GetInt32();
+
+                            if (stream.TryGetProperty("codec_name", out var c))
+                                codec = c.GetString() ?? "unknown";
+
+                            if (stream.TryGetProperty("avg_frame_rate", out var fr))
+                            {
+                                var val = fr.GetString();
+
+                                if (!string.IsNullOrEmpty(val) && val.Contains("/"))
+                                {
+                                    var parts = val.Split('/');
+                                    if (double.TryParse(parts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var num) &&
+                                        double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var den) &&
+                                        den != 0)
+                                    {
+                                        fps = num / den;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (type == "audio")
+                            hasAudio = true;
                     }
                 }
-            }
 
-            return (width, height, duration, fps, hasAudio);
+                if (doc.RootElement.TryGetProperty("format", out var format))
+                {
+                    if (format.TryGetProperty("duration", out var dur))
+                    {
+                        var durStr = dur.GetString();
+
+                        if (!string.IsNullOrEmpty(durStr))
+                        {
+                            if (!double.TryParse(durStr, NumberStyles.Any, CultureInfo.InvariantCulture, out duration))
+                            {
+                                // fallback для локали с запятой
+                                durStr = durStr.Replace(',', '.');
+                                double.TryParse(durStr, NumberStyles.Any, CultureInfo.InvariantCulture, out duration);
+                            }
+                        }
+                    }
+                }
+
+                return (width, height, duration, fps, hasAudio, codec);
+            }
+            catch
+            {
+                return Default();
+            }
+        }
+
+        private (int, int, double, double, bool, string) Default()
+        {
+            return (0, 0, 0, 25, false, "unknown");
         }
     }
 }

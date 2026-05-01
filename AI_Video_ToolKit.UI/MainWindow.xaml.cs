@@ -16,18 +16,19 @@ namespace AI_Video_ToolKit.UI
         private string? _file;
         private double _duration;
         private TimeSpan _current = TimeSpan.Zero;
+        private double _fps = 25;
 
         private bool _isPlaying;
         private bool _isPaused;
 
-        // 🔥 НОВАЯ ШКАЛА СКОРОСТЕЙ
-        private readonly double[] _speeds = new double[]
-        {
-            1, 2, 4, 5, 6, 7, 8, 10, 16
-        };
-
+        private readonly double[] _speeds = { 1, 2, 4, 5, 6, 7, 8, 10, 16 };
         private int _speedIndex = 0;
         private double Speed => _speeds[_speedIndex];
+
+        private int _width;
+        private int _height;
+        private long _totalFrames;
+        private string _codec = "";
 
         public MainWindow()
         {
@@ -39,16 +40,13 @@ namespace AI_Video_ToolKit.UI
                 Dispatcher.Invoke(() => Preview.SetFrame(f));
 
             _player.OnPositionChanged += t =>
-            {
                 Dispatcher.Invoke(() =>
                 {
                     _current = t;
                     Timeline.SetCurrentTime(t);
                 });
-            };
 
             _player.OnPlaybackEnded += () =>
-            {
                 Dispatcher.Invoke(() =>
                 {
                     if (LoopCheck.IsChecked == true)
@@ -59,10 +57,8 @@ namespace AI_Video_ToolKit.UI
 
                     _current = TimeSpan.Zero;
                     Timeline.SetCurrentTime(_current);
-
                     SetIdleState();
                 });
-            };
 
             Timeline.OnChanged += Timeline_Changed;
         }
@@ -73,19 +69,30 @@ namespace AI_Video_ToolKit.UI
         {
             var dlg = new OpenFileDialog
             {
-                Title = "Выберите видеофайл",
-                Filter = "Видео (*.mp4;*.mkv;*.mov;*.avi)|*.mp4;*.mkv;*.mov;*.avi|Все файлы (*.*)|*.*"
+                Filter = "Видео|*.mp4;*.mkv;*.mov;*.avi"
             };
 
-            if (dlg.ShowDialog() != true) return;
+            if (dlg.ShowDialog() != true)
+                return;
 
+            await LoadFile(dlg.FileName);
+        }
+
+        private async System.Threading.Tasks.Task LoadFile(string path)
+        {
             _player.Stop();
 
-            _file = dlg.FileName;
+            _file = path;
 
-            var info = await _ffprobe.GetInfo(_file);
+            var info = await _ffprobe.GetInfo(path);
 
             _duration = info.duration;
+            _width = info.width;
+            _height = info.height;
+            _fps = info.fps > 1 ? info.fps : 25;
+            _codec = info.codec;
+
+            _totalFrames = (long)(_duration * _fps);
             _current = TimeSpan.Zero;
 
             Timeline.SetDuration(_duration);
@@ -93,8 +100,9 @@ namespace AI_Video_ToolKit.UI
 
             await ShowFrame();
 
-            FileNameText.Text = Path.GetFileName(_file);
+            FileNameText.Text = Path.GetFileName(path);
 
+            UpdateInfoUI();
             SetIdleState();
         }
 
@@ -106,9 +114,7 @@ namespace AI_Video_ToolKit.UI
 
             _player.Stop();
 
-            _current = time;
-
-            _player.Start(_file, 1280, 720, 25, _current, Speed);
+            _player.Start(_file, 1280, 720, _fps, time, Speed);
 
             _isPlaying = true;
             _isPaused = false;
@@ -131,7 +137,6 @@ namespace AI_Video_ToolKit.UI
                 _player.Pause();
                 _isPlaying = false;
                 _isPaused = true;
-
                 SetPauseState();
                 return;
             }
@@ -139,11 +144,68 @@ namespace AI_Video_ToolKit.UI
             if (_isPaused)
             {
                 _player.Resume();
-                _isPaused = false;
                 _isPlaying = true;
-
+                _isPaused = false;
                 SetPlayState();
             }
+        }
+
+        // ================= STOP =================
+
+        private void Stop_Click(object? sender, RoutedEventArgs? e)
+        {
+            _player.Stop();
+
+            _current = TimeSpan.Zero;
+            Timeline.SetCurrentTime(_current);
+
+            _ = ShowFrame();
+
+            SetIdleState();
+        }
+
+        // ================= SEEK =================
+
+        private async void Timeline_Changed(TimeSpan t)
+        {
+            _current = t;
+
+            if (_isPlaying)
+                PlayFrom(_current);
+            else
+                await ShowFrame();
+        }
+
+        private async System.Threading.Tasks.Task ShowFrame()
+        {
+            if (_file == null) return;
+
+            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
+            if (frame != null)
+                Preview.SetFrame(frame);
+        }
+
+        private async void Step(int frames)
+        {
+            if (_file == null) return;
+
+            _player.Stop();
+
+            _current += TimeSpan.FromSeconds(frames / _fps);
+
+            if (_current < TimeSpan.Zero)
+                _current = TimeSpan.Zero;
+
+            if (_current.TotalSeconds > _duration)
+                _current = TimeSpan.FromSeconds(_duration);
+
+            Timeline.SetCurrentTime(_current);
+
+            await ShowFrame();
+
+            _isPlaying = false;
+            _isPaused = true;
+            SetPauseState();
         }
 
         // ================= SPEED =================
@@ -171,68 +233,7 @@ namespace AI_Video_ToolKit.UI
 
         private void UpdateSpeedUI()
         {
-            if (SpeedText != null)
-                SpeedText.Text = $"x{Speed}";
-        }
-
-        // ================= SEEK =================
-
-        private async void Timeline_Changed(TimeSpan t)
-        {
-            _current = t;
-
-            if (_isPlaying)
-                PlayFrom(_current);
-            else
-                await ShowFrame();
-        }
-
-        private async System.Threading.Tasks.Task ShowFrame()
-        {
-            if (_file == null) return;
-
-            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
-            Preview.SetFrame(frame);
-        }
-
-        private async void Step(int frames)
-        {
-            if (_file == null) return;
-
-            _player.Stop();
-
-            double fps = 25;
-
-            _current += TimeSpan.FromSeconds(frames / fps);
-
-            if (_current < TimeSpan.Zero)
-                _current = TimeSpan.Zero;
-
-            if (_current.TotalSeconds > _duration)
-                _current = TimeSpan.FromSeconds(_duration);
-
-            Timeline.SetCurrentTime(_current);
-
-            await ShowFrame();
-
-            _isPlaying = false;
-            _isPaused = true;
-            SetPauseState();
-        }
-
-        // ================= STOP =================
-
-        private void Stop_Click(object? sender, RoutedEventArgs? e)
-        {
-            _player.Stop();
-
-            _current = TimeSpan.Zero;
-
-            Timeline.SetCurrentTime(_current);
-
-            _ = ShowFrame();
-
-            SetIdleState();
+            SpeedText.Text = $"x{Speed}";
         }
 
         // ================= UI =================
@@ -251,11 +252,19 @@ namespace AI_Video_ToolKit.UI
 
         private void SetIdleState()
         {
-            _isPlaying = false;
-            _isPaused = false;
-
             PlayIcon.Text = "▶";
             PlayIcon.Foreground = System.Windows.Media.Brushes.White;
+
+            _isPlaying = false;
+            _isPaused = false;
+        }
+
+        private void UpdateInfoUI()
+        {
+            ResolutionText.Text = $"Resolution: {_width}x{_height}";
+            FpsText.Text = $"FPS: {_fps:0.##}";
+            CodecText.Text = $"Codec: {_codec}";
+            DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
         }
 
         // ================= HOTKEY =================
@@ -279,6 +288,13 @@ namespace AI_Video_ToolKit.UI
                 return;
             }
 
+            if (e.Key == Key.S)
+            {
+                Stop_Click(null, null);
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 Load_Click(null, null);
@@ -286,7 +302,7 @@ namespace AI_Video_ToolKit.UI
                 return;
             }
 
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None)
+            if (e.Key == Key.L)
             {
                 IncreaseSpeed();
                 e.Handled = true;
@@ -314,13 +330,6 @@ namespace AI_Video_ToolKit.UI
                 return;
             }
 
-            if (e.Key == Key.S)
-            {
-                Stop_Click(null, null);
-                e.Handled = true;
-                return;
-            }
-
             if (e.Key == Key.R)
             {
                 LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false);
@@ -333,31 +342,14 @@ namespace AI_Video_ToolKit.UI
             if (!e.Data.GetDataPresent(DataFormats.FileDrop))
                 return;
 
-            if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            if (files.Length == 0)
                 return;
 
-            var first = files[0];
-            if (Directory.Exists(first))
-                return;
-
-            var ext = Path.GetExtension(first).ToLowerInvariant();
-            if (ext is not ".mp4" and not ".mkv" and not ".mov" and not ".avi")
-                return;
-
-            _player.Stop();
-            _file = first;
-
-            var info = await _ffprobe.GetInfo(_file);
-            _duration = info.duration;
-            _current = TimeSpan.Zero;
-
-            Timeline.SetDuration(_duration);
-            Timeline.SetCurrentTime(_current);
-            await ShowFrame();
-
-            FileNameText.Text = Path.GetFileName(_file);
-            SetIdleState();
+            await LoadFile(files[0]);
         }
+
         private void PlaylistBox_SelectionChanged(object? sender, System.Windows.Controls.SelectionChangedEventArgs e) { }
     }
 }
