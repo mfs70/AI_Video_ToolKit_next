@@ -1,7 +1,9 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using AI_Video_ToolKit.UI.Services;
 
@@ -13,10 +15,14 @@ namespace AI_Video_ToolKit.UI
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
 
+        private readonly DispatcherTimer _clock = new();
+        private readonly Stopwatch _playTimer = new();
+
         private string? _file;
         private double _duration;
-        private TimeSpan _current = TimeSpan.Zero;
         private double _fps = 25;
+
+        private TimeSpan _current = TimeSpan.Zero;
 
         private bool _isPlaying;
         private bool _isPaused;
@@ -39,28 +45,28 @@ namespace AI_Video_ToolKit.UI
             _player.OnFrame += f =>
                 Dispatcher.Invoke(() => Preview.SetFrame(f));
 
-            _player.OnPositionChanged += t =>
-                Dispatcher.Invoke(() =>
-                {
-                    _current = t;
-                    Timeline.SetCurrentTime(t);
-                });
-
-            _player.OnPlaybackEnded += () =>
-                Dispatcher.Invoke(() =>
-                {
-                    if (LoopCheck.IsChecked == true)
-                    {
-                        PlayFrom(TimeSpan.Zero);
-                        return;
-                    }
-
-                    _current = TimeSpan.Zero;
-                    Timeline.SetCurrentTime(_current);
-                    SetIdleState();
-                });
+            _clock.Interval = TimeSpan.FromMilliseconds(16);
+            _clock.Tick += ClockTick;
 
             Timeline.OnChanged += Timeline_Changed;
+        }
+
+        // ================= CLOCK =================
+
+        private void ClockTick(object? sender, EventArgs e)
+        {
+            if (!_isPlaying) return;
+
+            var elapsed = _playTimer.Elapsed.TotalSeconds * Speed;
+            var newTime = _current + TimeSpan.FromSeconds(elapsed);
+
+            if (newTime.TotalSeconds >= _duration)
+            {
+                HandlePlaybackEnd();
+                return;
+            }
+
+            Timeline.SetCurrentTime(newTime);
         }
 
         // ================= LOAD =================
@@ -114,7 +120,12 @@ namespace AI_Video_ToolKit.UI
 
             _player.Stop();
 
-            _player.Start(_file, 1280, 720, _fps, time, Speed);
+            _current = time;
+
+            _player.Start(_file, 1280, 720, _fps, _current, Speed);
+
+            _playTimer.Restart();
+            _clock.Start();
 
             _isPlaying = true;
             _isPaused = false;
@@ -135,8 +146,12 @@ namespace AI_Video_ToolKit.UI
             if (_isPlaying)
             {
                 _player.Pause();
+                _clock.Stop();
+                _playTimer.Stop();
+
                 _isPlaying = false;
                 _isPaused = true;
+
                 SetPauseState();
                 return;
             }
@@ -144,22 +159,29 @@ namespace AI_Video_ToolKit.UI
             if (_isPaused)
             {
                 _player.Resume();
+
+                _playTimer.Restart();
+                _clock.Start();
+
                 _isPlaying = true;
                 _isPaused = false;
+
                 SetPlayState();
             }
         }
 
         // ================= STOP =================
 
-        private void Stop_Click(object? sender, RoutedEventArgs? e)
+        private async void Stop_Click(object? sender, RoutedEventArgs? e)
         {
             _player.Stop();
+            _clock.Stop();
+            _playTimer.Stop();
 
             _current = TimeSpan.Zero;
-            Timeline.SetCurrentTime(_current);
 
-            _ = ShowFrame();
+            Timeline.SetCurrentTime(_current);
+            await ShowFrame();
 
             SetIdleState();
         }
@@ -267,6 +289,28 @@ namespace AI_Video_ToolKit.UI
             DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
         }
 
+        // ================= END =================
+
+        private async void HandlePlaybackEnd()
+        {
+            _player.Stop();
+            _clock.Stop();
+            _playTimer.Stop();
+
+            _current = TimeSpan.Zero;
+            Timeline.SetCurrentTime(_current);
+
+            await ShowFrame();
+
+            if (LoopCheck.IsChecked == true)
+            {
+                PlayFrom(_current);
+                return;
+            }
+
+            SetIdleState();
+        }
+
         // ================= HOTKEY =================
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -281,8 +325,12 @@ namespace AI_Video_ToolKit.UI
             if (e.Key == Key.K)
             {
                 _player.Pause();
+                _clock.Stop();
+                _playTimer.Stop();
+
                 _isPlaying = false;
                 _isPaused = true;
+
                 SetPauseState();
                 e.Handled = true;
                 return;
@@ -336,6 +384,8 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
             }
         }
+
+        // ================= DRAG DROP =================
 
         private async void Window_Drop(object? sender, DragEventArgs e)
         {
