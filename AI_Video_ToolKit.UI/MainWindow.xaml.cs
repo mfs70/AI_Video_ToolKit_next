@@ -1,362 +1,301 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Diagnostics;
-using System.Windows.Threading;
-
-using IOPath = System.IO.Path;
-
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Shapes;
-using System.Windows.Media.Imaging;
-
 using Microsoft.Win32;
-
-using AI_Video_ToolKit.Core;
-using AI_Video_ToolKit.Infrastructure;
-using AI_Video_ToolKit.Domain;
+using AI_Video_ToolKit.UI.Services;
 
 namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
-        private FFmpegService _ffmpeg;
-        private VideoEditService _edit;
+        private readonly BufferedVideoPlayer _player = new();
+        private readonly FFprobeService _ffprobe = new();
+        private readonly FrameGrabber _grabber = new();
 
-        private List<string> _files = new();
-        private int _currentIndex = -1;
+        private string? _file;
+        private double _duration;
+        private double _fps = 25;
 
-        private TimelineService _timeline = new();
-        private Dictionary<string, BitmapImage> _thumbCache = new();
+        private TimeSpan _current = TimeSpan.Zero;
+        private long _currentFrame;
 
-        private DispatcherTimer _timer = new();
-        private bool _isSeeking = false;
+        private bool _isPlaying;
+        private bool _isHandlingPlaybackEnd;
+
+        private readonly double[] _speeds = { 1, 2, 4, 8, 16 };
+        private int _speedIndex;
+        private double Speed => _speeds[_speedIndex];
+
+        private int _width;
+        private int _height;
+        private long _totalFrames;
+        private string _codec = "";
 
         public MainWindow()
         {
             InitializeComponent();
+            UpdateSpeedUI();
 
-            _ffmpeg = new FFmpegService(@"C:\_Portable_\ffmpeg\bin\ffmpeg.exe");
-            _edit = new VideoEditService(_ffmpeg);
-
-            _timer.Interval = TimeSpan.FromMilliseconds(200);
-            _timer.Tick += UpdateSeekBar;
-            _timer.Start();
-        }
-
-        // ================= FILES =================
-
-        private void OpenFiles_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new OpenFileDialog { Multiselect = true };
-            if (dialog.ShowDialog() == true)
-                LoadFiles(dialog.FileNames);
-        }
-
-        private void LoadFiles(IEnumerable<string> items)
-        {
-            foreach (var path in items)
+            _player.OnFrame += f => Dispatcher.Invoke(() => Preview.SetFrame(f));
+            _player.OnPositionChanged += pos => Dispatcher.Invoke(() =>
             {
-                if (Directory.Exists(path))
-                {
-                    foreach (var f in Directory.GetFiles(path))
-                        AddFile(f);
-                }
-                else if (File.Exists(path))
-                {
-                    AddFile(path);
-                }
-            }
+                _current = ClampToDuration(pos);
+                _currentFrame = TimeToFrame(_current);
+                Timeline.SetCurrentTime(_current);
+                Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            });
+            _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
-            if (_files.Count > 0)
+            Timeline.OnChanged += Timeline_Changed;
+
+            Log("MainWindow initialized.");
+        }
+
+        private void Log(string text)
+        {
+            LogList.Items.Add($"[{DateTime.Now:HH:mm:ss}] {text}");
+            if (LogList.Items.Count > 500)
+                LogList.Items.RemoveAt(0);
+            LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
+        }
+
+        private async void Load_Click(object? sender, RoutedEventArgs? e)
+        {
+            var dlg = new OpenFileDialog { Filter = "Видео|*.mp4;*.mkv;*.mov;*.avi" };
+            if (dlg.ShowDialog() != true) return;
+            await LoadFile(dlg.FileName);
+        }
+
+        private async System.Threading.Tasks.Task LoadFile(string path)
+        {
+            _player.Stop();
+            _file = path;
+
+            var info = await _ffprobe.GetInfo(path);
+            _duration = info.duration;
+            _width = info.width;
+            _height = info.height;
+            _fps = info.fps > 1 ? info.fps : 25;
+            _codec = info.codec;
+
+            _totalFrames = (long)Math.Round(_duration * _fps);
+            _current = TimeSpan.Zero;
+            _currentFrame = 0;
+
+            Timeline.SetDuration(_duration);
+            Timeline.SetCurrentTime(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+
+            await ShowFrameByCurrentFrame();
+
+            FileNameText.Text = Path.GetFileName(path);
+            UpdateInfoUI();
+            SetIdleState();
+            _isHandlingPlaybackEnd = false;
+            Log($"Loaded file: {path}");
+        }
+
+        private void PlayFrom(TimeSpan time)
+        {
+            if (_file == null) return;
+
+            _player.Stop();
+            _current = ClampToDuration(time);
+            _currentFrame = TimeToFrame(_current);
+
+            _player.Start(_file, 1280, 720, _fps, _current, Speed);
+
+            _isPlaying = true;
+            SetPlayState();
+            Log($"Play from {_current:hh\\:mm\\:ss\\.fff} at x{Speed}");
+        }
+
+        private void TogglePlayPause_Click(object? sender, RoutedEventArgs? e)
+        {
+            if (_file == null) return;
+
+            if (_isPlaying)
             {
-                _currentIndex = 0;
-                LoadCurrent();
-            }
-
-            RedrawTimeline();
-        }
-
-        private void AddFile(string file)
-        {
-            string ext = IOPath.GetExtension(file).ToLower();
-            if (ext != ".mp4" && ext != ".mkv" && ext != ".png" && ext != ".jpg") return;
-
-            _files.Add(file);
-            _timeline.Add(file);
-        }
-
-        // ================= PREVIEW =================
-
-        private void LoadCurrent()
-        {
-            if (_currentIndex < 0 || _currentIndex >= _files.Count) return;
-
-            string file = _files[_currentIndex];
-            CurrentFileText.Text = file;
-
-            if (file.EndsWith(".mp4") || file.EndsWith(".mkv"))
-            {
-                ImageViewer.Visibility = Visibility.Collapsed;
-                VideoPlayer.Visibility = Visibility.Visible;
-
-                VideoPlayer.Source = new Uri(file);
-                VideoPlayer.Play();
-            }
-            else
-            {
-                VideoPlayer.Stop();
-                VideoPlayer.Visibility = Visibility.Collapsed;
-
-                ImageViewer.Visibility = Visibility.Visible;
-                ImageViewer.Source = new BitmapImage(new Uri(file));
-            }
-        }
-
-        // ================= PLAYER =================
-
-        private void Play_Click(object sender, RoutedEventArgs e) => VideoPlayer.Play();
-        private void Pause_Click(object sender, RoutedEventArgs e) => VideoPlayer.Pause();
-        private void Stop_Click(object sender, RoutedEventArgs e) => VideoPlayer.Stop();
-
-        private void Next_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentIndex < _files.Count - 1)
-            {
-                _currentIndex++;
-                LoadCurrent();
-            }
-        }
-
-        private void Prev_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentIndex > 0)
-            {
-                _currentIndex--;
-                LoadCurrent();
-            }
-        }
-
-        // ================= SEEK =================
-
-        private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
-        {
-            if (VideoPlayer.NaturalDuration.HasTimeSpan)
-            {
-                var d = VideoPlayer.NaturalDuration.TimeSpan;
-                DurationText.Text = d.ToString(@"mm\:ss");
-                SeekBar.Maximum = d.TotalSeconds;
-            }
-        }
-
-        private void UpdateSeekBar(object? sender, EventArgs e)
-        {
-            if (_isSeeking) return;
-
-            if (VideoPlayer.Source != null && VideoPlayer.NaturalDuration.HasTimeSpan)
-            {
-                SeekBar.Value = VideoPlayer.Position.TotalSeconds;
-                CurrentTimeText.Text = VideoPlayer.Position.ToString(@"mm\:ss");
-            }
-        }
-
-        private void SeekBar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (!_isSeeking)
-                VideoPlayer.Position = TimeSpan.FromSeconds(SeekBar.Value);
-        }
-
-        private void SeekBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            _isSeeking = true;
-        }
-
-        private void SeekBar_PreviewMouseUp(object sender, MouseButtonEventArgs e)
-        {
-            _isSeeking = false;
-            VideoPlayer.Position = TimeSpan.FromSeconds(SeekBar.Value);
-        }
-
-        // ================= TIMELINE =================
-
-        private void RedrawTimeline()
-        {
-            TimelineCanvas.Children.Clear();
-
-            double x = 10;
-
-            foreach (var file in _files)
-            {
-                var img = new Image
-                {
-                    Width = 100,
-                    Height = 60,
-                    Stretch = Stretch.Fill,
-                    Source = GetThumbnail(file)
-                };
-
-                Canvas.SetLeft(img, x);
-                Canvas.SetTop(img, 50);
-
-                TimelineCanvas.Children.Add(img);
-
-                x += 110;
-            }
-        }
-
-        private BitmapImage GetThumbnail(string file)
-        {
-            if (_thumbCache.ContainsKey(file))
-                return _thumbCache[file];
-
-            string temp = IOPath.Combine(IOPath.GetTempPath(), IOPath.GetFileName(file) + ".jpg");
-
-            if (!File.Exists(temp))
-            {
-                if (file.EndsWith(".mp4") || file.EndsWith(".mkv"))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe",
-                        Arguments = $"-y -i \"{file}\" -ss 00:00:01 -vframes 1 \"{temp}\"",
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    })?.WaitForExit();
-                }
-                else
-                {
-                    File.Copy(file, temp, true);
-                }
-            }
-
-            var bmp = new BitmapImage(new Uri(temp));
-            _thumbCache[file] = bmp;
-            return bmp;
-        }
-
-        // ================= 🎬 EDIT FUNCTIONS =================
-
-        private void Trim_Click(object sender, RoutedEventArgs e)
-        {
-            var f = GetCurrentFile();
-            if (f == null) return;
-
-            var r = _edit.Trim(f, GetOut("trim.mp4"), "00:00:02", "00:00:05");
-            LogBox.Text = r.Item2;
-        }
-
-        private void Split_Click(object sender, RoutedEventArgs e)
-        {
-            var f = GetCurrentFile();
-            if (f == null) return;
-
-            var r = _edit.Split(f, GetOut("part_%03d.mp4"), 5);
-            LogBox.Text = r.Item2;
-        }
-
-        private void Crop_Click(object sender, RoutedEventArgs e)
-        {
-            var f = GetCurrentFile();
-            if (f == null) return;
-
-            var r = _edit.Crop(f, GetOut("crop.mp4"), 300, 300, 0, 0);
-            LogBox.Text = r.Item2;
-        }
-
-        private void Probe_Click(object sender, RoutedEventArgs e)
-        {
-            var f = GetCurrentFile();
-            if (f == null) return;
-
-            var r = _ffmpeg.Probe(f);
-            LogBox.Text = r.Item2;
-        }
-
-        // ================= ENCODE / DECODE =================
-
-        private void Encode_Click(object sender, RoutedEventArgs e)
-        {
-            var f = GetCurrentFile();
-            if (f == null) return;
-
-            string dir = EncodeOutputPath.Text;
-            Directory.CreateDirectory(dir);
-
-            string output = IOPath.Combine(dir, "frame_%05d.png");
-
-            var r = _ffmpeg.Run($"-i \"{f}\" \"{output}\"");
-            LogBox.Text = r.Item2;
-        }
-
-        private void Decode_Click(object sender, RoutedEventArgs e)
-        {
-            string dir = DecodeInputPath.Text;
-
-            if (!Directory.Exists(dir))
-            {
-                LogBox.Text = "Folder not found";
+                _player.Pause();
+                _isPlaying = false;
+                SetPauseState();
+                Log("Paused.");
                 return;
             }
 
-            string output = IOPath.Combine(dir, "output.mp4");
-
-            var r = _ffmpeg.Run($"-framerate 30 -i \"{dir}\\frame_%05d.png\" -c:v libx264 \"{output}\"");
-            LogBox.Text = r.Item2;
+            PlayFrom(_current);
+            Log("Play/Resume from current position.");
         }
 
-        private void SelectEncodeFolder_Click(object sender, RoutedEventArgs e)
+        private async void Stop_Click(object? sender, RoutedEventArgs? e)
         {
-            var dialog = new OpenFileDialog
+            _player.Stop();
+
+            _current = TimeSpan.Zero;
+            _currentFrame = 0;
+
+            Timeline.SetCurrentTime(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
+
+            SetIdleState();
+            _isHandlingPlaybackEnd = false;
+            Log("Stopped.");
+        }
+
+        private async void Timeline_Changed(TimeSpan t)
+        {
+            _current = ClampToDuration(t);
+            _currentFrame = TimeToFrame(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+
+            if (_isPlaying) PlayFrom(_current);
+            else await ShowFrameByCurrentFrame();
+        }
+
+        private async System.Threading.Tasks.Task ShowFrameByCurrentFrame()
+        {
+            if (_file == null) return;
+
+            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
+            if (frame != null) Preview.SetFrame(frame);
+        }
+
+        private async void Step(int frames)
+        {
+            if (_file == null) return;
+
+            _player.Stop();
+            _currentFrame = Math.Clamp(_currentFrame + frames, 0, _totalFrames);
+            _current = FrameToTime(_currentFrame);
+
+            Timeline.SetCurrentTime(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
+
+            _isPlaying = false;
+            SetPauseState();
+            Log($"Step to frame {_currentFrame}.");
+        }
+
+        private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (SpeedCombo.SelectedItem is ComboBoxItem item)
             {
-                CheckFileExists = false,
-                FileName = "Select folder"
-            };
-
-            if (dialog.ShowDialog() == true)
-                EncodeOutputPath.Text = IOPath.GetDirectoryName(dialog.FileName);
+                var text = item.Content?.ToString()?.Replace("x", "");
+                if (int.TryParse(text, out var val))
+                {
+                    var idx = Array.IndexOf(_speeds, (double)val);
+                    if (idx >= 0) _speedIndex = idx;
+                    UpdateSpeedUI();
+                    if (_isPlaying) PlayFrom(_current);
+                    Log($"Speed set to x{Speed}");
+                }
+            }
         }
 
-        private void SelectDecodeFolder_Click(object sender, RoutedEventArgs e)
+        private void IncreaseSpeedHotkey()
         {
-            var dialog = new OpenFileDialog
+            if (_speedIndex < _speeds.Length - 1)
+                _speedIndex++;
+
+            SpeedCombo.SelectedIndex = _speedIndex;
+            UpdateSpeedUI();
+            if (_isPlaying) PlayFrom(_current);
+        }
+
+        private void ResetSpeedHotkey()
+        {
+            _speedIndex = 0;
+            SpeedCombo.SelectedIndex = 0;
+            UpdateSpeedUI();
+            if (_isPlaying) PlayFrom(_current);
+        }
+
+        private void UpdateSpeedUI() => SpeedText.Text = $"x{Speed}";
+        private void SetPlayState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.Green; }
+        private void SetPauseState() { PlayIcon.Text = "⏸"; PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow; }
+        private void SetIdleState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.White; _isPlaying = false; }
+
+        private void UpdateInfoUI()
+        {
+            ResolutionText.Text = $"Resolution: {_width}x{_height}";
+            FpsText.Text = $"FPS: {_fps:0.##}";
+            CodecText.Text = $"Codec: {_codec}";
+            DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
+        }
+
+        private async void HandlePlaybackEnd()
+        {
+            if (_isHandlingPlaybackEnd) return;
+            _isHandlingPlaybackEnd = true;
+
+            _player.Stop();
+
+            _current = TimeSpan.FromSeconds(_duration);
+            _currentFrame = _totalFrames;
+            Timeline.SetCurrentTime(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
+
+            if (LoopCheck.IsChecked == true)
             {
-                CheckFileExists = false,
-                FileName = "Select folder"
-            };
+                _isHandlingPlaybackEnd = false;
+                _current = TimeSpan.Zero;
+                _currentFrame = 0;
+                PlayFrom(_current);
+                return;
+            }
 
-            if (dialog.ShowDialog() == true)
-                DecodeInputPath.Text = IOPath.GetDirectoryName(dialog.FileName);
+            _isPlaying = false;
+            SetPauseState();
+            _isHandlingPlaybackEnd = false;
+            Log("Playback ended.");
         }
 
-        private string GetOut(string name)
+        private TimeSpan ClampToDuration(TimeSpan value)
         {
-            string dir = @"D:\output";
-            Directory.CreateDirectory(dir);
-            return IOPath.Combine(dir, name);
+            if (value < TimeSpan.Zero) return TimeSpan.Zero;
+            var max = TimeSpan.FromSeconds(_duration);
+            return value > max ? max : value;
         }
 
-        private string? GetCurrentFile()
+        private long TimeToFrame(TimeSpan time)
         {
-            if (_currentIndex < 0) return null;
-            return _files[_currentIndex];
+            if (_fps <= 0) return 0;
+            var frame = (long)Math.Round(time.TotalSeconds * _fps);
+            return Math.Clamp(frame, 0, _totalFrames);
         }
 
-        // ================= DRAG DROP =================
+        private TimeSpan FrameToTime(long frame)
+        {
+            if (_fps <= 0) return TimeSpan.Zero;
+            return TimeSpan.FromSeconds(frame / _fps);
+        }
 
-        private void Window_Drop(object sender, DragEventArgs e)
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); Log("Paused (K)."); } e.Handled = true; return; }
+            if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { Load_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.L) { IncreaseSpeedHotkey(); e.Handled = true; return; }
+            if (e.Key == Key.J) { ResetSpeedHotkey(); e.Handled = true; return; }
+            if (e.Key == Key.Right) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); e.Handled = true; return; }
+            if (e.Key == Key.Left) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); e.Handled = true; return; }
+            if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
+        }
+
+        private async void Window_Drop(object? sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-
-            var items = (string[])e.Data.GetData(DataFormats.FileDrop);
-            LoadFiles(items);
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (files.Length == 0) return;
+            await LoadFile(files[0]);
         }
 
-        private void Window_DragOver(object sender, DragEventArgs e)
-        {
-            e.Effects = DragDropEffects.Copy;
-        }
+        private void PlaylistBox_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
     }
 }

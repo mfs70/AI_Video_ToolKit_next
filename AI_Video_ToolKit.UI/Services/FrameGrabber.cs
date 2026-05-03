@@ -1,0 +1,80 @@
+using System;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+
+namespace AI_Video_ToolKit.UI.Services
+{
+    public class FrameGrabber
+    {
+        private const string FFmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+
+        public Task<BitmapSource?> GetFrame(string file, TimeSpan time, int width, int height)
+        {
+            var ts = time.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var args =
+                $"-ss {ts} -i \"{file}\" " +
+                "-frames:v 1 " +
+                $"-vf scale={width}:{height}:force_original_aspect_ratio=decrease," +
+                $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2 " +
+                "-f rawvideo -pix_fmt bgr24 -";
+
+            return GrabRawFrame(args, width, height);
+        }
+
+        public Task<BitmapSource?> GetFrameByNumber(string file, long frameNumber, int width, int height)
+        {
+            if (frameNumber < 0) frameNumber = 0;
+
+            var args =
+                $"-i \"{file}\" " +
+                $"-vf \"select='eq(n\\,{frameNumber})',scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2\" " +
+                "-frames:v 1 -vsync 0 -f rawvideo -pix_fmt bgr24 -";
+
+            return GrabRawFrame(args, width, height);
+        }
+
+        private static async Task<BitmapSource?> GrabRawFrame(string arguments, int width, int height)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = FFmpegPath,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                var process = Process.Start(psi);
+                if (process == null)
+                    return null;
+
+                int frameSize = width * height * 3;
+                byte[] buffer = new byte[frameSize];
+                var stream = process.StandardOutput.BaseStream;
+
+                int read = 0;
+                while (read < frameSize)
+                {
+                    int r = await stream.ReadAsync(buffer, read, frameSize - read);
+                    if (r == 0) break;
+                    read += r;
+                }
+
+                if (read != frameSize)
+                    return null;
+
+                var bmp = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr24, null, buffer, width * 3);
+                bmp.Freeze();
+                return bmp;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+}
