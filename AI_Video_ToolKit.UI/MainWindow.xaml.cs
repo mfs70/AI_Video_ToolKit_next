@@ -22,7 +22,6 @@ namespace AI_Video_ToolKit.UI
         private long _currentFrame;
 
         private bool _isPlaying;
-        private bool _isPaused;
         private bool _isHandlingPlaybackEnd;
 
         private readonly double[] _speeds = { 1, 2, 4, 8, 16 };
@@ -109,7 +108,6 @@ namespace AI_Video_ToolKit.UI
             _player.Start(_file, 1280, 720, _fps, _current, Speed);
 
             _isPlaying = true;
-            _isPaused = false;
             SetPlayState();
             Log($"Play from {_current:hh\\:mm\\:ss\\.fff} at x{Speed}");
         }
@@ -122,7 +120,6 @@ namespace AI_Video_ToolKit.UI
             {
                 _player.Pause();
                 _isPlaying = false;
-                _isPaused = true;
                 SetPauseState();
                 Log("Paused.");
                 return;
@@ -179,7 +176,6 @@ namespace AI_Video_ToolKit.UI
             await ShowFrameByCurrentFrame();
 
             _isPlaying = false;
-            _isPaused = true;
             SetPauseState();
             Log($"Step to frame {_currentFrame}.");
         }
@@ -221,7 +217,7 @@ namespace AI_Video_ToolKit.UI
         private void UpdateSpeedUI() => SpeedText.Text = $"x{Speed}";
         private void SetPlayState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.Green; }
         private void SetPauseState() { PlayIcon.Text = "⏸"; PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow; }
-        private void SetIdleState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.White; _isPlaying = false; _isPaused = false; }
+        private void SetIdleState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.White; _isPlaying = false; }
 
         private void UpdateInfoUI()
         {
@@ -254,7 +250,6 @@ namespace AI_Video_ToolKit.UI
             }
 
             _isPlaying = false;
-            _isPaused = true;
             SetPauseState();
             _isHandlingPlaybackEnd = false;
             Log("Playback ended.");
@@ -283,7 +278,7 @@ namespace AI_Video_ToolKit.UI
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
-            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; _isPaused = true; SetPauseState(); Log("Paused (K)."); } e.Handled = true; return; }
+            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); Log("Paused (K)."); } e.Handled = true; return; }
             if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { Load_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L) { IncreaseSpeedHotkey(); e.Handled = true; return; }
