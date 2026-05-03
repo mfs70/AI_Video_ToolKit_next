@@ -1,7 +1,7 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -16,19 +16,20 @@ namespace AI_Video_ToolKit.UI
         private readonly FrameGrabber _grabber = new();
 
         private readonly DispatcherTimer _clock = new();
-        private readonly Stopwatch _playTimer = new();
 
         private string? _file;
         private double _duration;
         private double _fps = 25;
 
         private TimeSpan _current = TimeSpan.Zero;
+        private long _currentFrame;
 
         private bool _isPlaying;
         private bool _isPaused;
+        private bool _isHandlingPlaybackEnd;
 
-        private readonly double[] _speeds = { 1, 2, 4, 5, 6, 7, 8, 10, 16 };
-        private int _speedIndex = 0;
+        private readonly double[] _speeds = { 1, 2, 4, 8, 16 };
+        private int _speedIndex;
         private double Speed => _speeds[_speedIndex];
 
         private int _width;
@@ -39,97 +40,82 @@ namespace AI_Video_ToolKit.UI
         public MainWindow()
         {
             InitializeComponent();
-
             UpdateSpeedUI();
 
-            _player.OnFrame += f =>
-                Dispatcher.Invoke(() => Preview.SetFrame(f));
+            _player.OnFrame += f => Dispatcher.Invoke(() => Preview.SetFrame(f));
+            _player.OnPositionChanged += pos => Dispatcher.Invoke(() =>
+            {
+                _current = ClampToDuration(pos);
+                _currentFrame = TimeToFrame(_current);
+                Timeline.SetCurrentTime(_current);
+                Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            });
+            _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
-            _clock.Interval = TimeSpan.FromMilliseconds(16);
+            _clock.Interval = TimeSpan.FromMilliseconds(30);
             _clock.Tick += ClockTick;
 
             Timeline.OnChanged += Timeline_Changed;
         }
 
-        // ================= CLOCK =================
-
         private void ClockTick(object? sender, EventArgs e)
         {
             if (!_isPlaying) return;
-
-            var elapsed = _playTimer.Elapsed.TotalSeconds * Speed;
-            var newTime = _current + TimeSpan.FromSeconds(elapsed);
-
-            if (newTime.TotalSeconds >= _duration)
-            {
-                HandlePlaybackEnd();
-                return;
-            }
-
+            var newTime = ClampToDuration(_player.GetCurrentPosition());
+            _current = newTime;
+            _currentFrame = TimeToFrame(newTime);
             Timeline.SetCurrentTime(newTime);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
         }
-
-        // ================= LOAD =================
 
         private async void Load_Click(object? sender, RoutedEventArgs? e)
         {
-            var dlg = new OpenFileDialog
-            {
-                Filter = "Видео|*.mp4;*.mkv;*.mov;*.avi"
-            };
-
-            if (dlg.ShowDialog() != true)
-                return;
-
+            var dlg = new OpenFileDialog { Filter = "Видео|*.mp4;*.mkv;*.mov;*.avi" };
+            if (dlg.ShowDialog() != true) return;
             await LoadFile(dlg.FileName);
         }
 
         private async System.Threading.Tasks.Task LoadFile(string path)
         {
             _player.Stop();
-
             _file = path;
 
             var info = await _ffprobe.GetInfo(path);
-
             _duration = info.duration;
             _width = info.width;
             _height = info.height;
             _fps = info.fps > 1 ? info.fps : 25;
             _codec = info.codec;
 
-            _totalFrames = (long)(_duration * _fps);
+            _totalFrames = (long)Math.Round(_duration * _fps);
             _current = TimeSpan.Zero;
+            _currentFrame = 0;
 
             Timeline.SetDuration(_duration);
             Timeline.SetCurrentTime(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
 
-            await ShowFrame();
+            await ShowFrameByCurrentFrame();
 
             FileNameText.Text = Path.GetFileName(path);
-
             UpdateInfoUI();
             SetIdleState();
+            _isHandlingPlaybackEnd = false;
         }
-
-        // ================= PLAY =================
 
         private void PlayFrom(TimeSpan time)
         {
             if (_file == null) return;
 
             _player.Stop();
-
-            _current = time;
+            _current = ClampToDuration(time);
+            _currentFrame = TimeToFrame(_current);
 
             _player.Start(_file, 1280, 720, _fps, _current, Speed);
 
-            _playTimer.Restart();
             _clock.Start();
-
             _isPlaying = true;
             _isPaused = false;
-
             SetPlayState();
         }
 
@@ -137,21 +123,14 @@ namespace AI_Video_ToolKit.UI
         {
             if (_file == null) return;
 
-            if (!_isPlaying && !_isPaused)
-            {
-                PlayFrom(_current);
-                return;
-            }
+            if (!_isPlaying && !_isPaused) { PlayFrom(_current); return; }
 
             if (_isPlaying)
             {
                 _player.Pause();
                 _clock.Stop();
-                _playTimer.Stop();
-
                 _isPlaying = false;
                 _isPaused = true;
-
                 SetPauseState();
                 return;
             }
@@ -159,52 +138,45 @@ namespace AI_Video_ToolKit.UI
             if (_isPaused)
             {
                 _player.Resume();
-
-                _playTimer.Restart();
                 _clock.Start();
-
                 _isPlaying = true;
                 _isPaused = false;
-
                 SetPlayState();
             }
         }
-
-        // ================= STOP =================
 
         private async void Stop_Click(object? sender, RoutedEventArgs? e)
         {
             _player.Stop();
             _clock.Stop();
-            _playTimer.Stop();
 
             _current = TimeSpan.Zero;
+            _currentFrame = 0;
 
             Timeline.SetCurrentTime(_current);
-            await ShowFrame();
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
 
             SetIdleState();
+            _isHandlingPlaybackEnd = false;
         }
-
-        // ================= SEEK =================
 
         private async void Timeline_Changed(TimeSpan t)
         {
-            _current = t;
+            _current = ClampToDuration(t);
+            _currentFrame = TimeToFrame(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
 
-            if (_isPlaying)
-                PlayFrom(_current);
-            else
-                await ShowFrame();
+            if (_isPlaying) PlayFrom(_current);
+            else await ShowFrameByCurrentFrame();
         }
 
-        private async System.Threading.Tasks.Task ShowFrame()
+        private async System.Threading.Tasks.Task ShowFrameByCurrentFrame()
         {
             if (_file == null) return;
 
-            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
-            if (frame != null)
-                Preview.SetFrame(frame);
+            var frame = await _grabber.GetFrameByNumber(_file, _currentFrame, 1280, 720);
+            if (frame != null) Preview.SetFrame(frame);
         }
 
         private async void Step(int frames)
@@ -212,74 +184,57 @@ namespace AI_Video_ToolKit.UI
             if (_file == null) return;
 
             _player.Stop();
+            _clock.Stop();
 
-            _current += TimeSpan.FromSeconds(frames / _fps);
-
-            if (_current < TimeSpan.Zero)
-                _current = TimeSpan.Zero;
-
-            if (_current.TotalSeconds > _duration)
-                _current = TimeSpan.FromSeconds(_duration);
+            _currentFrame = Math.Clamp(_currentFrame + frames, 0, _totalFrames);
+            _current = FrameToTime(_currentFrame);
 
             Timeline.SetCurrentTime(_current);
-
-            await ShowFrame();
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
 
             _isPlaying = false;
             _isPaused = true;
             SetPauseState();
         }
 
-        // ================= SPEED =================
+        private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (SpeedCombo.SelectedItem is ComboBoxItem item)
+            {
+                var text = item.Content?.ToString()?.Replace("x", "");
+                if (int.TryParse(text, out var val))
+                {
+                    var idx = Array.IndexOf(_speeds, (double)val);
+                    if (idx >= 0) _speedIndex = idx;
+                    UpdateSpeedUI();
+                    if (_isPlaying) PlayFrom(_current);
+                }
+            }
+        }
 
-        private void IncreaseSpeed()
+        private void IncreaseSpeedHotkey()
         {
             if (_speedIndex < _speeds.Length - 1)
                 _speedIndex++;
 
+            SpeedCombo.SelectedIndex = _speedIndex;
             UpdateSpeedUI();
-
-            if (_isPlaying)
-                PlayFrom(_current);
+            if (_isPlaying) PlayFrom(_current);
         }
 
-        private void ResetSpeed()
+        private void ResetSpeedHotkey()
         {
             _speedIndex = 0;
-
+            SpeedCombo.SelectedIndex = 0;
             UpdateSpeedUI();
-
-            if (_isPlaying)
-                PlayFrom(_current);
+            if (_isPlaying) PlayFrom(_current);
         }
 
-        private void UpdateSpeedUI()
-        {
-            SpeedText.Text = $"x{Speed}";
-        }
-
-        // ================= UI =================
-
-        private void SetPlayState()
-        {
-            PlayIcon.Text = "▶";
-            PlayIcon.Foreground = System.Windows.Media.Brushes.Green;
-        }
-
-        private void SetPauseState()
-        {
-            PlayIcon.Text = "⏸";
-            PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow;
-        }
-
-        private void SetIdleState()
-        {
-            PlayIcon.Text = "▶";
-            PlayIcon.Foreground = System.Windows.Media.Brushes.White;
-
-            _isPlaying = false;
-            _isPaused = false;
-        }
+        private void UpdateSpeedUI() => SpeedText.Text = $"x{Speed}";
+        private void SetPlayState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.Green; }
+        private void SetPauseState() { PlayIcon.Text = "⏸"; PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow; }
+        private void SetIdleState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.White; _isPlaying = false; _isPaused = false; }
 
         private void UpdateInfoUI()
         {
@@ -289,117 +244,76 @@ namespace AI_Video_ToolKit.UI
             DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
         }
 
-        // ================= END =================
-
         private async void HandlePlaybackEnd()
         {
+            if (_isHandlingPlaybackEnd) return;
+            _isHandlingPlaybackEnd = true;
+
             _player.Stop();
             _clock.Stop();
-            _playTimer.Stop();
 
-            _current = TimeSpan.Zero;
+            _current = TimeSpan.FromSeconds(_duration);
+            _currentFrame = _totalFrames;
             Timeline.SetCurrentTime(_current);
-
-            await ShowFrame();
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
 
             if (LoopCheck.IsChecked == true)
             {
+                _isHandlingPlaybackEnd = false;
+                _current = TimeSpan.Zero;
+                _currentFrame = 0;
                 PlayFrom(_current);
                 return;
             }
 
-            SetIdleState();
+            _isPlaying = false;
+            _isPaused = true;
+            SetPauseState();
+            _isHandlingPlaybackEnd = false;
         }
 
-        // ================= HOTKEY =================
+        private TimeSpan ClampToDuration(TimeSpan value)
+        {
+            if (value < TimeSpan.Zero) return TimeSpan.Zero;
+            var max = TimeSpan.FromSeconds(_duration);
+            return value > max ? max : value;
+        }
+
+        private long TimeToFrame(TimeSpan time)
+        {
+            if (_fps <= 0) return 0;
+            var frame = (long)Math.Round(time.TotalSeconds * _fps);
+            return Math.Clamp(frame, 0, _totalFrames);
+        }
+
+        private TimeSpan FrameToTime(long frame)
+        {
+            if (_fps <= 0) return TimeSpan.Zero;
+            return TimeSpan.FromSeconds(frame / _fps);
+        }
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Space)
-            {
-                TogglePlayPause_Click(null, null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.K)
-            {
-                _player.Pause();
-                _clock.Stop();
-                _playTimer.Stop();
-
-                _isPlaying = false;
-                _isPaused = true;
-
-                SetPauseState();
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.S)
-            {
-                Stop_Click(null, null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
-            {
-                Load_Click(null, null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.L)
-            {
-                IncreaseSpeed();
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.J)
-            {
-                ResetSpeed();
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.Right)
-            {
-                Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.Left)
-            {
-                Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.R)
-            {
-                LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false);
-                e.Handled = true;
-            }
+            if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.K) { _player.Pause(); _clock.Stop(); _isPlaying = false; _isPaused = true; SetPauseState(); e.Handled = true; return; }
+            if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { Load_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.L) { IncreaseSpeedHotkey(); e.Handled = true; return; }
+            if (e.Key == Key.J) { ResetSpeedHotkey(); e.Handled = true; return; }
+            if (e.Key == Key.Right) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); e.Handled = true; return; }
+            if (e.Key == Key.Left) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); e.Handled = true; return; }
+            if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
         }
-
-        // ================= DRAG DROP =================
 
         private async void Window_Drop(object? sender, DragEventArgs e)
         {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop))
-                return;
-
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-
-            if (files.Length == 0)
-                return;
-
+            if (files.Length == 0) return;
             await LoadFile(files[0]);
         }
 
-        private void PlaylistBox_SelectionChanged(object? sender, System.Windows.Controls.SelectionChangedEventArgs e) { }
+        private void PlaylistBox_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
     }
 }

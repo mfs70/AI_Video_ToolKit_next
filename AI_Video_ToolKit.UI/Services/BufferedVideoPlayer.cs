@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +11,7 @@ namespace AI_Video_ToolKit.UI.Services
     public class BufferedVideoPlayer
     {
         private const string FFmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+        private const int MaxBufferedFrames = 30;
 
         private Process? _process;
         private CancellationTokenSource? _cts;
@@ -20,10 +22,16 @@ namespace AI_Video_ToolKit.UI.Services
         private double _speed = 1.0;
 
         private volatile bool _isPaused;
+        private volatile bool _decodeFinished;
 
-        private Stopwatch _clock = new();
+        private readonly object _bufferLock = new();
+        private readonly Queue<byte[]> _frameQueue = new();
+
+        private long _decodedFrames;
+        private long _presentedFrames;
+
         private TimeSpan _startTime;
-        private TimeSpan _pauseOffset;
+        private TimeSpan _lastPosition;
 
         public event Action<BitmapSource>? OnFrame;
         public event Action<TimeSpan>? OnPositionChanged;
@@ -35,20 +43,21 @@ namespace AI_Video_ToolKit.UI.Services
 
             _width = width;
             _height = height;
-            _fps = fps <= 0 ? 25 : fps;
-            _speed = speed;
+            _fps = fps > 0 ? fps : 25;
+            _speed = speed > 0 ? speed : 1.0;
 
             _startTime = start;
-            _pauseOffset = TimeSpan.Zero;
-
-            _cts = new CancellationTokenSource();
+            _lastPosition = start;
+            _decodedFrames = 0;
+            _presentedFrames = 0;
+            _decodeFinished = false;
             _isPaused = false;
 
+            _cts = new CancellationTokenSource();
             StartFFmpeg(file, start);
 
-            _clock.Restart();
-
-            Task.Run(() => ReadLoop(_cts.Token));
+            Task.Run(() => DecodeLoop(_cts.Token));
+            Task.Run(() => PlaybackLoop(_cts.Token));
         }
 
         private void StartFFmpeg(string file, TimeSpan start)
@@ -70,16 +79,56 @@ namespace AI_Video_ToolKit.UI.Services
             _process = Process.Start(psi);
         }
 
-        private async Task ReadLoop(CancellationToken token)
+        private async Task DecodeLoop(CancellationToken token)
         {
             if (_process == null) return;
 
             var stream = _process.StandardOutput.BaseStream;
-
             int frameSize = _width * _height * 3;
-            byte[] buffer = new byte[frameSize];
 
-            double frameTimeMs = 1000.0 / (_fps * _speed);
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    lock (_bufferLock)
+                    {
+                        if (_frameQueue.Count >= MaxBufferedFrames)
+                        {
+                            Monitor.Wait(_bufferLock, 10);
+                            continue;
+                        }
+                    }
+
+                    var buffer = new byte[frameSize];
+                    int read = 0;
+                    while (read < frameSize)
+                    {
+                        int r = await stream.ReadAsync(buffer, read, frameSize - read, token);
+                        if (r == 0)
+                        {
+                            _decodeFinished = true;
+                            return;
+                        }
+                        read += r;
+                    }
+
+                    lock (_bufferLock)
+                    {
+                        _frameQueue.Enqueue(buffer);
+                        _decodedFrames++;
+                        Monitor.PulseAll(_bufferLock);
+                    }
+                }
+            }
+            catch
+            {
+                _decodeFinished = true;
+            }
+        }
+
+        private async Task PlaybackLoop(CancellationToken token)
+        {
+            var frameDelayMs = (int)Math.Max(1, 1000.0 / Math.Max(0.0001, _fps * _speed));
 
             try
             {
@@ -91,19 +140,27 @@ namespace AI_Video_ToolKit.UI.Services
                         continue;
                     }
 
-                    int read = 0;
-                    while (read < frameSize)
+                    byte[]? frame = null;
+                    lock (_bufferLock)
                     {
-                        int r = await stream.ReadAsync(buffer, read, frameSize - read, token);
-                        if (r == 0)
+                        if (_frameQueue.Count > 0)
+                        {
+                            frame = _frameQueue.Dequeue();
+                            Monitor.PulseAll(_bufferLock);
+                        }
+                    }
+
+                    if (frame == null)
+                    {
+                        if (_decodeFinished)
                         {
                             OnPlaybackEnded?.Invoke();
                             return;
                         }
-                        read += r;
-                    }
 
-                    var current = _startTime + _pauseOffset + _clock.Elapsed;
+                        await Task.Delay(2, token);
+                        continue;
+                    }
 
                     var bmp = BitmapSource.Create(
                         _width,
@@ -112,34 +169,35 @@ namespace AI_Video_ToolKit.UI.Services
                         96,
                         PixelFormats.Bgr24,
                         null,
-                        buffer,
+                        frame,
                         _width * 3);
 
                     bmp.Freeze();
-
                     OnFrame?.Invoke(bmp);
-                    OnPositionChanged?.Invoke(current);
 
-                    await Task.Delay((int)frameTimeMs, token);
+                    _presentedFrames++;
+                    _lastPosition = _startTime + TimeSpan.FromSeconds(_presentedFrames / _fps);
+                    OnPositionChanged?.Invoke(_lastPosition);
+
+                    await Task.Delay(frameDelayMs, token);
                 }
             }
-            catch { }
+            catch
+            {
+                // swallow on stop
+            }
         }
 
         public void Pause()
         {
             if (_isPaused) return;
-
-            _pauseOffset += _clock.Elapsed;
-            _clock.Reset();
             _isPaused = true;
+            OnPositionChanged?.Invoke(_lastPosition);
         }
 
         public void Resume()
         {
             if (!_isPaused) return;
-
-            _clock.Restart();
             _isPaused = false;
         }
 
@@ -153,6 +211,25 @@ namespace AI_Video_ToolKit.UI.Services
                     _process.Kill();
             }
             catch { }
+            finally
+            {
+                _process?.Dispose();
+                _process = null;
+
+                _cts?.Dispose();
+                _cts = null;
+
+                lock (_bufferLock)
+                {
+                    _frameQueue.Clear();
+                    Monitor.PulseAll(_bufferLock);
+                }
+
+                _decodeFinished = false;
+                _isPaused = false;
+            }
         }
+
+        public TimeSpan GetCurrentPosition() => _lastPosition;
     }
 }

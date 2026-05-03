@@ -4,21 +4,36 @@
 
     <Grid Background="#222">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="22"/>
         </Grid.RowDefinitions>
 
-        <!-- Таймлайн -->
+        <Canvas Grid.Row="0"
+                Height="18"
+                Margin="5,0,5,0">
+            <Border x:Name="FrameCursor"
+                    Background="#CC111111"
+                    CornerRadius="3"
+                    Padding="4,1"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="FrameText"
+                           Foreground="#FFD7FFB0"
+                           FontSize="11"
+                           Text="0"/>
+            </Border>
+        </Canvas>
+
         <Slider x:Name="Slider"
+                Grid.Row="1"
                 Minimum="0"
                 Maximum="100"
                 ValueChanged="Slider_ValueChanged"
                 VerticalAlignment="Center"
                 Margin="5,0,5,0"/>
 
-        <!-- Время -->
         <TextBlock x:Name="TimeText"
-                   Grid.Row="1"
+                   Grid.Row="2"
                    Foreground="White"
                    FontSize="12"
                    HorizontalAlignment="Center"
