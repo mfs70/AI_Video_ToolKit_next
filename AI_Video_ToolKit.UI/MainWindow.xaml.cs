@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Threading;
 using Microsoft.Win32;
 using AI_Video_ToolKit.UI.Services;
 
@@ -14,8 +13,6 @@ namespace AI_Video_ToolKit.UI
         private readonly BufferedVideoPlayer _player = new();
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
-
-        private readonly DispatcherTimer _clock = new();
 
         private string? _file;
         private double _duration;
@@ -52,20 +49,17 @@ namespace AI_Video_ToolKit.UI
             });
             _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
-            _clock.Interval = TimeSpan.FromMilliseconds(30);
-            _clock.Tick += ClockTick;
-
             Timeline.OnChanged += Timeline_Changed;
+
+            Log("MainWindow initialized.");
         }
 
-        private void ClockTick(object? sender, EventArgs e)
+        private void Log(string text)
         {
-            if (!_isPlaying) return;
-            var newTime = ClampToDuration(_player.GetCurrentPosition());
-            _current = newTime;
-            _currentFrame = TimeToFrame(newTime);
-            Timeline.SetCurrentTime(newTime);
-            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            LogList.Items.Add($"[{DateTime.Now:HH:mm:ss}] {text}");
+            if (LogList.Items.Count > 500)
+                LogList.Items.RemoveAt(0);
+            LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
         }
 
         private async void Load_Click(object? sender, RoutedEventArgs? e)
@@ -101,6 +95,7 @@ namespace AI_Video_ToolKit.UI
             UpdateInfoUI();
             SetIdleState();
             _isHandlingPlaybackEnd = false;
+            Log($"Loaded file: {path}");
         }
 
         private void PlayFrom(TimeSpan time)
@@ -113,42 +108,33 @@ namespace AI_Video_ToolKit.UI
 
             _player.Start(_file, 1280, 720, _fps, _current, Speed);
 
-            _clock.Start();
             _isPlaying = true;
             _isPaused = false;
             SetPlayState();
+            Log($"Play from {_current:hh\\:mm\\:ss\\.fff} at x{Speed}");
         }
 
         private void TogglePlayPause_Click(object? sender, RoutedEventArgs? e)
         {
             if (_file == null) return;
 
-            if (!_isPlaying && !_isPaused) { PlayFrom(_current); return; }
-
             if (_isPlaying)
             {
                 _player.Pause();
-                _clock.Stop();
                 _isPlaying = false;
                 _isPaused = true;
                 SetPauseState();
+                Log("Paused.");
                 return;
             }
 
-            if (_isPaused)
-            {
-                _player.Resume();
-                _clock.Start();
-                _isPlaying = true;
-                _isPaused = false;
-                SetPlayState();
-            }
+            PlayFrom(_current);
+            Log("Play/Resume from current position.");
         }
 
         private async void Stop_Click(object? sender, RoutedEventArgs? e)
         {
             _player.Stop();
-            _clock.Stop();
 
             _current = TimeSpan.Zero;
             _currentFrame = 0;
@@ -159,6 +145,7 @@ namespace AI_Video_ToolKit.UI
 
             SetIdleState();
             _isHandlingPlaybackEnd = false;
+            Log("Stopped.");
         }
 
         private async void Timeline_Changed(TimeSpan t)
@@ -175,7 +162,7 @@ namespace AI_Video_ToolKit.UI
         {
             if (_file == null) return;
 
-            var frame = await _grabber.GetFrameByNumber(_file, _currentFrame, 1280, 720);
+            var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
             if (frame != null) Preview.SetFrame(frame);
         }
 
@@ -184,8 +171,6 @@ namespace AI_Video_ToolKit.UI
             if (_file == null) return;
 
             _player.Stop();
-            _clock.Stop();
-
             _currentFrame = Math.Clamp(_currentFrame + frames, 0, _totalFrames);
             _current = FrameToTime(_currentFrame);
 
@@ -196,6 +181,7 @@ namespace AI_Video_ToolKit.UI
             _isPlaying = false;
             _isPaused = true;
             SetPauseState();
+            Log($"Step to frame {_currentFrame}.");
         }
 
         private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -209,6 +195,7 @@ namespace AI_Video_ToolKit.UI
                     if (idx >= 0) _speedIndex = idx;
                     UpdateSpeedUI();
                     if (_isPlaying) PlayFrom(_current);
+                    Log($"Speed set to x{Speed}");
                 }
             }
         }
@@ -250,7 +237,6 @@ namespace AI_Video_ToolKit.UI
             _isHandlingPlaybackEnd = true;
 
             _player.Stop();
-            _clock.Stop();
 
             _current = TimeSpan.FromSeconds(_duration);
             _currentFrame = _totalFrames;
@@ -271,6 +257,7 @@ namespace AI_Video_ToolKit.UI
             _isPaused = true;
             SetPauseState();
             _isHandlingPlaybackEnd = false;
+            Log("Playback ended.");
         }
 
         private TimeSpan ClampToDuration(TimeSpan value)
@@ -296,7 +283,7 @@ namespace AI_Video_ToolKit.UI
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
-            if (e.Key == Key.K) { _player.Pause(); _clock.Stop(); _isPlaying = false; _isPaused = true; SetPauseState(); e.Handled = true; return; }
+            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; _isPaused = true; SetPauseState(); Log("Paused (K)."); } e.Handled = true; return; }
             if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { Load_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L) { IncreaseSpeedHotkey(); e.Handled = true; return; }
