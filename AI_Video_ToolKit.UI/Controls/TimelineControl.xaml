@@ -9,8 +9,9 @@
             <RowDefinition Height="22"/>
         </Grid.RowDefinitions>
 
-        <Canvas Grid.Row="0"
-                Height="18"
+        <Canvas x:Name="MarkerCanvas"
+                Grid.Row="0"
+                Height="22"
                 Margin="5,0,5,0">
             <Border x:Name="FrameCursor"
                     Background="#CC111111"

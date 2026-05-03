@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:AI_Video_ToolKit.UI.Controls"
         Title="AI Video Toolkit"
-        Width="1200"
-        Height="760"
+        Width="1300"
+        Height="780"
         Background="#1e1e1e"
         PreviewKeyDown="Window_PreviewKeyDown"
         AllowDrop="True"
@@ -23,7 +23,7 @@
                                 Margin="10">
                         <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="4*"/>
-                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1.4*"/>
                         </Grid.ColumnDefinitions>
 
                         <controls:VideoPreviewControl x:Name="Preview"
@@ -33,7 +33,8 @@
                         <Grid Grid.Column="1">
                                 <Grid.RowDefinitions>
                                         <RowDefinition Height="2*"/>
-                                        <RowDefinition Height="3*"/>
+                                        <RowDefinition Height="2*"/>
+                                        <RowDefinition Height="2*"/>
                                 </Grid.RowDefinitions>
 
                                 <Border Grid.Row="0"
@@ -41,7 +42,8 @@
                                                 BorderBrush="#444"
                                                 BorderThickness="1"
                                                 CornerRadius="4"
-                                                Padding="6">
+                                                Padding="6"
+                                                Margin="0,0,0,6">
                                         <Grid>
                                                 <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
@@ -52,14 +54,76 @@
                                                                 FontSize="12"
                                                                 Margin="0,0,0,4"/>
                                                 <ListBox x:Name="LogList"
-                                                         Grid.Row="1"
-                                                         Background="#101010"
-                                                         Foreground="#A5E1A5"
-                                                         BorderThickness="0"
-                                                         FontFamily="Consolas"
-                                                         FontSize="11"/>
+                                                                Grid.Row="1"
+                                                                Background="#101010"
+                                                                Foreground="#A5E1A5"
+                                                                BorderThickness="0"
+                                                                FontFamily="Consolas"
+                                                                FontSize="11"/>
                                         </Grid>
                                 </Border>
+
+                                <Border Grid.Row="1"
+                                                Background="#121212"
+                                                BorderBrush="#444"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6"
+                                                Margin="0,0,0,6">
+                                        <Grid>
+                                                <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Text="Segments"
+                                                                Foreground="#DDD"
+                                                                FontSize="12"
+                                                                Margin="0,0,0,4"/>
+                                                <ListBox x:Name="SegmentList"
+                                                                Grid.Row="1"
+                                                                Background="#101010"
+                                                                Foreground="#E0E0E0"
+                                                                BorderThickness="0"
+                                                                FontFamily="Consolas"
+                                                                FontSize="11"
+                                                                SelectionChanged="SegmentList_SelectionChanged"/>
+                                        </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Row="2"
+                                                Orientation="Vertical"
+                                                MinWidth="180">
+                                        <Button Height="34"
+                                                        Margin="0,0,0,4"
+                                                        Click="PreviewSegment_Click">
+                                                <TextBlock Text="Preview Segment"
+                                                                FontSize="12"/>
+                                        </Button>
+                                        <Button Height="34"
+                                                        Margin="0,0,0,4"
+                                                        Click="ExportSelected_Click">
+                                                <TextBlock Text="Export Selected"
+                                                                FontSize="12"/>
+                                        </Button>
+                                        <Button Height="34"
+                                                        Margin="0,0,0,4"
+                                                        Click="Cut_Click">
+                                                <TextBlock Text="Export All"
+                                                                FontSize="12"/>
+                                        </Button>
+                                        <Button Height="34"
+                                                        Margin="0,0,0,4"
+                                                        Click="UndoMarker_Click">
+                                                <TextBlock Text="Undo Marker (Ctrl+Z)"
+                                                                FontSize="12"/>
+                                        </Button>
+                                        <Button Height="34"
+                                                        Margin="0,0,0,4"
+                                                        Click="ClearCuts_Click">
+                                                <TextBlock Text="Clear Cuts"
+                                                                FontSize="12"/>
+                                        </Button>
+                                </StackPanel>
                         </Grid>
                 </Grid>
 
@@ -75,7 +139,6 @@
                                         Foreground="White"
                                         FontSize="14"
                                         VerticalAlignment="Center"/>
-
                         <TextBlock x:Name="SpeedText"
                                         Grid.Column="1"
                                         Foreground="Orange"
@@ -83,13 +146,12 @@
                                         VerticalAlignment="Center"
                                         Margin="20,0,10,0"
                                         Text="x1"/>
-
                         <ComboBox x:Name="SpeedCombo"
-                                  Grid.Column="2"
-                                  Width="80"
-                                  Height="26"
-                                  VerticalAlignment="Center"
-                                  SelectionChanged="SpeedCombo_SelectionChanged">
+                                        Grid.Column="2"
+                                        Width="80"
+                                        Height="26"
+                                        VerticalAlignment="Center"
+                                        SelectionChanged="SpeedCombo_SelectionChanged">
                                 <ComboBoxItem Content="x1"
                                                 IsSelected="True"/>
                                 <ComboBoxItem Content="x2"/>
@@ -130,7 +192,6 @@
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"/>
                         </Button>
-
                         <Button Width="80"
                                         Height="40"
                                         Margin="5"
@@ -139,7 +200,6 @@
                                                 FontSize="18"
                                                 Foreground="White"/>
                         </Button>
-
                         <Button Width="80"
                                         Height="40"
                                         Margin="5"
@@ -147,7 +207,6 @@
                                 <TextBlock Text="📂"
                                                 FontSize="18"/>
                         </Button>
-
                         <CheckBox x:Name="LoopCheck"
                                         Content="Loop"
                                         Foreground="White"

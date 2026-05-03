@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,6 +13,15 @@ namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
+        private sealed record Segment(int Index, TimeSpan Start, TimeSpan End)
+        {
+            public TimeSpan Duration => End - Start;
+            public override string ToString() => $"#{Index}  {Start:hh\\:mm\\:ss\\.fff} - {End:hh\\:mm\\:ss\\.fff} ({Duration:hh\\:mm\\:ss\\.fff})";
+        }
+
+        private enum MarkerActionType { InputSet, OutputSet, CutAdd, CutClear }
+        private readonly record struct MarkerAction(MarkerActionType Type, TimeSpan? Value, List<TimeSpan>? SnapshotCuts = null);
+
         private readonly BufferedVideoPlayer _player = new();
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
@@ -33,6 +45,12 @@ namespace AI_Video_ToolKit.UI
         private long _totalFrames;
         private string _codec = "";
 
+        private TimeSpan? _inputMarker;
+        private TimeSpan? _outputMarker;
+        private readonly List<TimeSpan> _cutMarkers = new();
+        private readonly Stack<MarkerAction> _undoStack = new();
+        private readonly List<Segment> _segments = new();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -49,16 +67,46 @@ namespace AI_Video_ToolKit.UI
             _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
             Timeline.OnChanged += Timeline_Changed;
-
             Log("MainWindow initialized.");
         }
 
         private void Log(string text)
         {
             LogList.Items.Add($"[{DateTime.Now:HH:mm:ss}] {text}");
-            if (LogList.Items.Count > 500)
-                LogList.Items.RemoveAt(0);
+            if (LogList.Items.Count > 500) LogList.Items.RemoveAt(0);
             LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
+        }
+
+        private void RefreshMarkers()
+        {
+            Timeline.SetMarkers(_inputMarker, _outputMarker, _cutMarkers);
+            RebuildSegments();
+        }
+
+        private void RebuildSegments()
+        {
+            _segments.Clear();
+            SegmentList.Items.Clear();
+            if (_duration <= 0) return;
+
+            var points = new List<TimeSpan> { TimeSpan.Zero };
+            if (_inputMarker.HasValue) points.Add(_inputMarker.Value);
+            points.AddRange(_cutMarkers.OrderBy(x => x));
+            if (_outputMarker.HasValue) points.Add(_outputMarker.Value);
+            points.Add(TimeSpan.FromSeconds(_duration));
+
+            points = points.Distinct().OrderBy(x => x).ToList();
+
+            int idx = 1;
+            for (int i = 0; i < points.Count - 1; i++)
+            {
+                if (points[i + 1] <= points[i]) continue;
+                var seg = new Segment(idx++, points[i], points[i + 1]);
+                _segments.Add(seg);
+                SegmentList.Items.Add(seg.ToString());
+            }
+
+            Log($"Segments rebuilt: {_segments.Count}");
         }
 
         private async void Load_Click(object? sender, RoutedEventArgs? e)
@@ -84,9 +132,15 @@ namespace AI_Video_ToolKit.UI
             _current = TimeSpan.Zero;
             _currentFrame = 0;
 
+            _inputMarker = null;
+            _outputMarker = null;
+            _cutMarkers.Clear();
+            _undoStack.Clear();
+
             Timeline.SetDuration(_duration);
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            RefreshMarkers();
 
             await ShowFrameByCurrentFrame();
 
@@ -100,49 +154,31 @@ namespace AI_Video_ToolKit.UI
         private void PlayFrom(TimeSpan time)
         {
             if (_file == null) return;
-
             _player.Stop();
             _current = ClampToDuration(time);
             _currentFrame = TimeToFrame(_current);
-
             _player.Start(_file, 1280, 720, _fps, _current, Speed);
-
             _isPlaying = true;
             SetPlayState();
-            Log($"Play from {_current:hh\\:mm\\:ss\\.fff} at x{Speed}");
         }
 
         private void TogglePlayPause_Click(object? sender, RoutedEventArgs? e)
         {
             if (_file == null) return;
-
-            if (_isPlaying)
-            {
-                _player.Pause();
-                _isPlaying = false;
-                SetPauseState();
-                Log("Paused.");
-                return;
-            }
-
+            if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); return; }
             PlayFrom(_current);
-            Log("Play/Resume from current position.");
         }
 
         private async void Stop_Click(object? sender, RoutedEventArgs? e)
         {
             _player.Stop();
-
             _current = TimeSpan.Zero;
             _currentFrame = 0;
-
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
             await ShowFrameByCurrentFrame();
-
             SetIdleState();
             _isHandlingPlaybackEnd = false;
-            Log("Stopped.");
         }
 
         private async void Timeline_Changed(TimeSpan t)
@@ -150,7 +186,6 @@ namespace AI_Video_ToolKit.UI
             _current = ClampToDuration(t);
             _currentFrame = TimeToFrame(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
-
             if (_isPlaying) PlayFrom(_current);
             else await ShowFrameByCurrentFrame();
         }
@@ -158,7 +193,6 @@ namespace AI_Video_ToolKit.UI
         private async System.Threading.Tasks.Task ShowFrameByCurrentFrame()
         {
             if (_file == null) return;
-
             var frame = await _grabber.GetFrame(_file, _current, 1280, 720);
             if (frame != null) Preview.SetFrame(frame);
         }
@@ -166,18 +200,14 @@ namespace AI_Video_ToolKit.UI
         private async void Step(int frames)
         {
             if (_file == null) return;
-
             _player.Stop();
             _currentFrame = Math.Clamp(_currentFrame + frames, 0, _totalFrames);
             _current = FrameToTime(_currentFrame);
-
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
             await ShowFrameByCurrentFrame();
-
             _isPlaying = false;
             SetPauseState();
-            Log($"Step to frame {_currentFrame}.");
         }
 
         private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -191,29 +221,97 @@ namespace AI_Video_ToolKit.UI
                     if (idx >= 0) _speedIndex = idx;
                     UpdateSpeedUI();
                     if (_isPlaying) PlayFrom(_current);
-                    Log($"Speed set to x{Speed}");
                 }
             }
         }
 
-        private void IncreaseSpeedHotkey()
+        private async void Cut_Click(object sender, RoutedEventArgs e)
         {
-            if (_speedIndex < _speeds.Length - 1)
-                _speedIndex++;
+            foreach (var seg in _segments) await ExportSegment(seg);
+            Log($"Export all complete: {_segments.Count} segments");
+        }
 
-            SpeedCombo.SelectedIndex = _speedIndex;
-            UpdateSpeedUI();
+        private async void ExportSelected_Click(object sender, RoutedEventArgs e)
+        {
+            if (SegmentList.SelectedIndex < 0 || SegmentList.SelectedIndex >= _segments.Count) return;
+            await ExportSegment(_segments[SegmentList.SelectedIndex]);
+            Log($"Export selected complete: {_segments[SegmentList.SelectedIndex]}");
+        }
+
+        private async System.Threading.Tasks.Task ExportSegment(Segment seg)
+        {
+            if (_file == null) return;
+            var root = Directory.GetCurrentDirectory();
+            var cutDir = Path.Combine(root, "Cut");
+            Directory.CreateDirectory(cutDir);
+
+            var srcName = Path.GetFileNameWithoutExtension(_file);
+            var ext = Path.GetExtension(_file);
+            var outFile = Path.Combine(cutDir, $"{srcName}_{seg.Index}{ext}");
+
+            var ok = await RunFfmpeg($"-y -ss {seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -to {seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -i \"{_file}\" -c copy \"{outFile}\"");
+            if (!ok)
+            {
+                Log($"copy failed for segment {seg.Index}, fallback to re-encode");
+                await RunFfmpeg($"-y -ss {seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -to {seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -i \"{_file}\" -c:v libx264 -preset veryfast -crf 18 -c:a aac -b:a 192k \"{outFile}\"");
+            }
+        }
+
+        private async void PreviewSegment_Click(object sender, RoutedEventArgs e)
+        {
+            if (SegmentList.SelectedIndex < 0 || SegmentList.SelectedIndex >= _segments.Count) return;
+            var seg = _segments[SegmentList.SelectedIndex];
+            _current = seg.Start;
+            _currentFrame = TimeToFrame(_current);
+            Timeline.SetCurrentTime(_current);
+            Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+            await ShowFrameByCurrentFrame();
             if (_isPlaying) PlayFrom(_current);
         }
 
-        private void ResetSpeedHotkey()
+        private void SegmentList_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+        private void UndoMarker_Click(object sender, RoutedEventArgs e) => UndoMarker();
+        private void ClearCuts_Click(object sender, RoutedEventArgs e)
         {
-            _speedIndex = 0;
-            SpeedCombo.SelectedIndex = 0;
-            UpdateSpeedUI();
-            if (_isPlaying) PlayFrom(_current);
+            if (_cutMarkers.Count == 0) return;
+            _undoStack.Push(new MarkerAction(MarkerActionType.CutClear, null, new List<TimeSpan>(_cutMarkers)));
+            _cutMarkers.Clear();
+            RefreshMarkers();
         }
 
+        private void UndoMarker()
+        {
+            if (_undoStack.Count == 0) return;
+            var action = _undoStack.Pop();
+            switch (action.Type)
+            {
+                case MarkerActionType.InputSet: _inputMarker = action.Value; break;
+                case MarkerActionType.OutputSet: _outputMarker = action.Value; break;
+                case MarkerActionType.CutAdd: if (action.Value.HasValue) _cutMarkers.Remove(action.Value.Value); break;
+                case MarkerActionType.CutClear: _cutMarkers.Clear(); if (action.SnapshotCuts != null) _cutMarkers.AddRange(action.SnapshotCuts); break;
+            }
+            RefreshMarkers();
+        }
+
+        private static async System.Threading.Tasks.Task<bool> RunFfmpeg(string args)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe",
+                Arguments = args,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+
+            using var p = Process.Start(psi);
+            if (p == null) return false;
+            await p.WaitForExitAsync();
+            return p.ExitCode == 0;
+        }
+
+        private void IncreaseSpeedHotkey() { if (_speedIndex < _speeds.Length - 1) _speedIndex++; SpeedCombo.SelectedIndex = _speedIndex; UpdateSpeedUI(); if (_isPlaying) PlayFrom(_current); }
+        private void ResetSpeedHotkey() { _speedIndex = 0; SpeedCombo.SelectedIndex = 0; UpdateSpeedUI(); if (_isPlaying) PlayFrom(_current); }
         private void UpdateSpeedUI() => SpeedText.Text = $"x{Speed}";
         private void SetPlayState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.Green; }
         private void SetPauseState() { PlayIcon.Text = "⏸"; PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow; }
@@ -231,15 +329,12 @@ namespace AI_Video_ToolKit.UI
         {
             if (_isHandlingPlaybackEnd) return;
             _isHandlingPlaybackEnd = true;
-
             _player.Stop();
-
             _current = TimeSpan.FromSeconds(_duration);
             _currentFrame = _totalFrames;
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
             await ShowFrameByCurrentFrame();
-
             if (LoopCheck.IsChecked == true)
             {
                 _isHandlingPlaybackEnd = false;
@@ -248,11 +343,9 @@ namespace AI_Video_ToolKit.UI
                 PlayFrom(_current);
                 return;
             }
-
             _isPlaying = false;
             SetPauseState();
             _isHandlingPlaybackEnd = false;
-            Log("Playback ended.");
         }
 
         private TimeSpan ClampToDuration(TimeSpan value)
@@ -278,11 +371,39 @@ namespace AI_Video_ToolKit.UI
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
-            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); Log("Paused (K)."); } e.Handled = true; return; }
+            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); } e.Handled = true; return; }
             if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { Load_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L) { IncreaseSpeedHotkey(); e.Handled = true; return; }
             if (e.Key == Key.J) { ResetSpeedHotkey(); e.Handled = true; return; }
+            if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { UndoMarker(); e.Handled = true; return; }
+            if (e.Key == Key.I)
+            {
+                _undoStack.Push(new MarkerAction(MarkerActionType.InputSet, _inputMarker));
+                _inputMarker = _current;
+                _cutMarkers.RemoveAll(c => c <= _inputMarker.Value);
+                RefreshMarkers();
+                e.Handled = true; return;
+            }
+            if (e.Key == Key.O)
+            {
+                _undoStack.Push(new MarkerAction(MarkerActionType.OutputSet, _outputMarker));
+                _outputMarker = _current;
+                _cutMarkers.RemoveAll(c => c >= _outputMarker.Value);
+                RefreshMarkers();
+                e.Handled = true; return;
+            }
+            if (e.Key == Key.C)
+            {
+                var p = _current;
+                if (_inputMarker.HasValue && p <= _inputMarker.Value) return;
+                if (_outputMarker.HasValue && p >= _outputMarker.Value) return;
+                _cutMarkers.Add(p);
+                _cutMarkers.Sort();
+                _undoStack.Push(new MarkerAction(MarkerActionType.CutAdd, p));
+                RefreshMarkers();
+                e.Handled = true; return;
+            }
             if (e.Key == Key.Right) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); e.Handled = true; return; }
             if (e.Key == Key.Left) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); e.Handled = true; return; }
             if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
