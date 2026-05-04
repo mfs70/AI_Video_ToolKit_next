@@ -4,6 +4,6 @@
              xmlns:local="clr-namespace:AI_Video_ToolKit.UI"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-
+         
     </Application.Resources>
 </Application>

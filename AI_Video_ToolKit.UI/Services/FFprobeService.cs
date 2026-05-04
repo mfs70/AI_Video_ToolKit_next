@@ -10,7 +10,7 @@ namespace AI_Video_ToolKit.UI.Services
     {
         private const string FFPROBE_PATH = @"C:\_Portable_\FFMPEG\bin\ffprobe.exe";
 
-        public async Task<(int width, int height, double duration, double fps, bool hasAudio, string codec, long videoBitrate)> GetInfo(string file)
+        public async Task<(int width, int height, double duration, double fps, bool hasAudio, string codec)> GetInfo(string file)
         {
             try
             {
@@ -42,7 +42,6 @@ namespace AI_Video_ToolKit.UI.Services
                 double fps = 25;
                 bool hasAudio = false;
                 string codec = "unknown";
-                long videoBitrate = 0;
 
                 if (doc.RootElement.TryGetProperty("streams", out var streams))
                 {
@@ -60,12 +59,6 @@ namespace AI_Video_ToolKit.UI.Services
 
                             if (stream.TryGetProperty("codec_name", out var c))
                                 codec = c.GetString() ?? "unknown";
-                            if (stream.TryGetProperty("bit_rate", out var br))
-                            {
-                                var brStr = br.GetString();
-                                if (!string.IsNullOrWhiteSpace(brStr))
-                                    long.TryParse(brStr, NumberStyles.Any, CultureInfo.InvariantCulture, out videoBitrate);
-                            }
 
                             if (stream.TryGetProperty("avg_frame_rate", out var fr))
                             {
@@ -105,15 +98,9 @@ namespace AI_Video_ToolKit.UI.Services
                             }
                         }
                     }
-                    if (videoBitrate <= 0 && format.TryGetProperty("bit_rate", out var fbr))
-                    {
-                        var fbrStr = fbr.GetString();
-                        if (!string.IsNullOrWhiteSpace(fbrStr))
-                            long.TryParse(fbrStr, NumberStyles.Any, CultureInfo.InvariantCulture, out videoBitrate);
-                    }
                 }
 
-                return (width, height, duration, fps, hasAudio, codec, videoBitrate);
+                return (width, height, duration, fps, hasAudio, codec);
             }
             catch
             {
@@ -121,9 +108,9 @@ namespace AI_Video_ToolKit.UI.Services
             }
         }
 
-        private (int, int, double, double, bool, string, long) Default()
+        private (int, int, double, double, bool, string) Default()
         {
-            return (0, 0, 0, 25, false, "unknown", 0);
+            return (0, 0, 0, 25, false, "unknown");
         }
     }
 }

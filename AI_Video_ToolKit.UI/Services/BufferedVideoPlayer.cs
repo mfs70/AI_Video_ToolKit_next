@@ -24,6 +24,7 @@ namespace AI_Video_ToolKit.UI.Services
         private double _speed = 1.0;
 
         private volatile bool _isPaused;
+        private volatile bool _isPlaybackLoopRunning;
 
         private Channel<byte[]>? _frameChannel;
         private int _bufferedFrameCapacity = 20;
@@ -145,6 +146,7 @@ namespace AI_Video_ToolKit.UI.Services
             if (_frameChannel == null)
                 return;
 
+            _isPlaybackLoopRunning = true;
             var reader = _frameChannel.Reader;
             var frameDelayMs = (int)Math.Max(1, 1000.0 / Math.Max(0.0001, _fps * _speed));
 
@@ -196,6 +198,7 @@ namespace AI_Video_ToolKit.UI.Services
             }
             finally
             {
+                _isPlaybackLoopRunning = false;
             }
         }
 
@@ -232,6 +235,7 @@ namespace AI_Video_ToolKit.UI.Services
 
                 _frameChannel = null;
                 _isPaused = false;
+                _isPlaybackLoopRunning = false;
             }
         }
 
