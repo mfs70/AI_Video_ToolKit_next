@@ -56,6 +56,12 @@ namespace AI_Video_ToolKit.UI
         private TimeSpan _playbackRangeStart = TimeSpan.Zero;
         private TimeSpan _playbackRangeEnd = TimeSpan.MaxValue;
 
+        private TimeSpan? _inputMarker;
+        private TimeSpan? _outputMarker;
+        private readonly List<TimeSpan> _cutMarkers = new();
+        private readonly Stack<MarkerAction> _undoStack = new();
+        private readonly List<Segment> _segments = new();
+
         public MainWindow()
         {
             InitializeComponent();

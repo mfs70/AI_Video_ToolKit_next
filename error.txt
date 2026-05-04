@@ -1,30 +1,8 @@
-PS D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI> dotnet build
-  Определение проектов для восстановления...
-  Все проекты обновлены для восстановления.
-  AI_Video_ToolKit.Domain -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Domain\bin\Debug\net8.0\AI_Video_ToolKit.Domain.dll
-  AI_Video_ToolKit.Infrastructure -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Infrastructure\bin\Debug\net8.0\AI_Video_ToolKit.I
-  nfrastructure.dll
-  AI_Video_ToolKit.Core -> D:\AI_Video_ToolKit_next\AI_Video_ToolKit.Core\bin\Debug\net8.0\AI_Video_ToolKit.Core.dll
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(56,108): error CS1061: "MainWindow" не содержит определения "Load_Cl
-ick", и не удалось найти доступный метод расширения "Load_Click", принимающий тип "MainWindow" в качестве первого аргумента (возм 
-ожно, пропущена директива using или ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h 
-_wpftmp.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(17,24): warning CS0169: Поле "MainWindow._duration" никогда не ис 
-пользуется. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h_wpftmp.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(16,25): warning CS0649: Полю "MainWindow._file" нигде не присваив 
-ается значение, поэтому оно всегда будет иметь значение по умолчанию null. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video 
-_ToolKit.UI_afoom33h_wpftmp.csproj]
-
-Ошибка сборки.
-
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(17,24): warning CS0169: Поле "MainWindow._duration" никогда не ис 
-пользуется. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h_wpftmp.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml.cs(16,25): warning CS0649: Полю "MainWindow._file" нигде не присваив 
-ается значение, поэтому оно всегда будет иметь значение по умолчанию null. [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video 
-_ToolKit.UI_afoom33h_wpftmp.csproj]
-D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\MainWindow.xaml(56,108): error CS1061: "MainWindow" не содержит определения "Load_Cl 
-ick", и не удалось найти доступный метод расширения "Load_Click", принимающий тип "MainWindow" в качестве первого аргумента (возм 
-ожно, пропущена директива using или ссылка на сборку). [D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\AI_Video_ToolKit.UI_afoom33h 
-_wpftmp.csproj]
-    Предупреждений: 2
-    Ошибок: 1
+при перетаскивании курсора таймлайна, с помощью мышки, и последующим запуском(плей) возникает большая задержка. нужно исправить(возможно полностью периписать) этот механизм.
+Так же пора добавить на таймлайн маркеры обрезки(мантажа), хоткей I(input зеленый) O(output красный) C( cut белый).
+Обрезать файл, от начала файла до маркер Input и от маркера Output до конца файла, если маркер Input установлен то маркеры Cut не могут быть установлены перед ним, если маркер Output установлен то маркеры Cut не могут быть установлены после него. Input и Output могут быть использованы по одиночке, тогда обрезка происходит только с одной из сторон(от начали или до конца).
+Маркеры Cut могут быть после Input (при его наличии) или перед Output (при его наличии). Маркеров Cut может быть несколько (например 4) и по ним осуществляется разрез входного файла на части (без удаления).
+Разрезка производится после нажатия кнопки Cut в GUI, части файла маркируются <имяфайла_номерчасти>(1 2 3 4 итд) и добавляются в папку Cut в корне проекта.
+При запуске проекта нужно проверять наличие папок по умолчанию (Input Output Сut Frames  и др). 
+Публикуй полные версии файлов, если есть вопросы задавай для уточнения функции и др.
+функция обрезки должна работать как у типичных видеоредактов.
