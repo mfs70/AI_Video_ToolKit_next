@@ -9,12 +9,17 @@ namespace AI_Video_ToolKit.UI.Controls
 {
     public partial class TimelineControl : UserControl
     {
+        public enum MarkerSelection { None, Input, Output, Cut }
         private double _duration;
         private bool _internalChange;
+        private TimeSpan? _selectedMarkerTime;
+        private MarkerSelection _selectedType = MarkerSelection.None;
 
         public event Action<TimeSpan>? OnChanged;
 
         public TimelineControl() => InitializeComponent();
+        public MarkerSelection SelectedMarkerType => _selectedType;
+        public TimeSpan? SelectedMarkerTime => _selectedMarkerTime;
 
         public void SetDuration(double duration)
         {
@@ -52,6 +57,25 @@ namespace AI_Video_ToolKit.UI.Controls
             foreach (var c in cuts) DrawMarker(c, Brushes.White, 1);
 
             markerCanvas.Children.Add(FrameCursor);
+
+            markerCanvas.MouseLeftButtonDown += (_, e) =>
+            {
+                var p = e.GetPosition(markerCanvas);
+                var sec = (p.X / Math.Max(1, markerCanvas.ActualWidth)) * _duration;
+                var click = TimeSpan.FromSeconds(sec);
+                SelectNearestMarker(click, input, output, cuts);
+            };
+        }
+
+        private void SelectNearestMarker(TimeSpan click, TimeSpan? input, TimeSpan? output, IReadOnlyCollection<TimeSpan> cuts)
+        {
+            _selectedType = MarkerSelection.None;
+            _selectedMarkerTime = null;
+            var threshold = TimeSpan.FromSeconds(0.2);
+            if (input.HasValue && (input.Value - click).Duration() <= threshold) { _selectedType = MarkerSelection.Input; _selectedMarkerTime = input; return; }
+            if (output.HasValue && (output.Value - click).Duration() <= threshold) { _selectedType = MarkerSelection.Output; _selectedMarkerTime = output; return; }
+            foreach (var c in cuts)
+                if ((c - click).Duration() <= threshold) { _selectedType = MarkerSelection.Cut; _selectedMarkerTime = c; return; }
         }
 
         private void DrawMarker(TimeSpan? time, Brush color, double width)

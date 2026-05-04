@@ -45,6 +45,7 @@ namespace AI_Video_ToolKit.UI
         private long _totalFrames;
         private string _codec = "";
         private long _videoBitrate;
+        private bool _hasAudio;
 
         private TimeSpan? _inputMarker;
         private TimeSpan? _outputMarker;
@@ -160,6 +161,7 @@ namespace AI_Video_ToolKit.UI
             _fps = info.fps > 1 ? info.fps : 25;
             _codec = info.codec;
             _videoBitrate = info.videoBitrate;
+            _hasAudio = info.hasAudio;
 
             _totalFrames = (long)Math.Round(_duration * _fps);
             _current = TimeSpan.Zero;
@@ -180,6 +182,7 @@ namespace AI_Video_ToolKit.UI
 
             FileNameText.Text = Path.GetFileName(path);
             UpdateInfoUI();
+            RefreshMontagePanel();
             SetIdleState();
             _isHandlingPlaybackEnd = false;
             Log($"Loaded file: {path}");
@@ -270,15 +273,41 @@ namespace AI_Video_ToolKit.UI
 
         private async void Cut_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var seg in _segments) await ExportSegment(seg);
+            ExportProgress.Value = 0;
+            var total = Math.Max(1, _segments.Count);
+            for (int i = 0; i < _segments.Count; i++)
+            {
+                await ExportSegment(_segments[i]);
+                ExportProgress.Value = (i + 1) * 100.0 / total;
+            }
+            RefreshMontagePanel();
             Log($"Export all complete: {_segments.Count} segments");
         }
 
         private async void ExportSelected_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedSegment == null) return;
+            ExportProgress.Value = 0;
             await ExportSegment(_selectedSegment);
+            ExportProgress.Value = 100;
+            RefreshMontagePanel();
             Log($"Export selected complete: {_selectedSegment}");
+        }
+
+        private async void MergeSelected_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = MontageList.SelectedItems.Cast<string>().ToList();
+            if (selected.Count < 2) { Log("Select at least 2 montage items."); return; }
+            var root = Directory.GetCurrentDirectory();
+            var cutDir = Path.Combine(root, "Cut");
+            var outDir = Path.Combine(root, "Output");
+            Directory.CreateDirectory(outDir);
+            var listFile = Path.Combine(root, "Temp", "concat_list.txt");
+            Directory.CreateDirectory(Path.Combine(root, "Temp"));
+            File.WriteAllLines(listFile, selected.Select(s => $"file '{Path.Combine(cutDir, s).Replace("'", "''")}'"));
+            var outFile = Path.Combine(outDir, $"merged_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
+            var ok = await RunFfmpeg($"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outFile}\"");
+            Log(ok ? $"Merged to {outFile}" : "Merge failed");
         }
 
         private async System.Threading.Tasks.Task ExportSegment(Segment seg)
@@ -296,7 +325,17 @@ namespace AI_Video_ToolKit.UI
             var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var bitrateKbps = Math.Max(1500, (int)Math.Round((_videoBitrate > 0 ? _videoBitrate : 4_000_000) / 1000.0));
             var bufSizeKbps = bitrateKbps * 2;
-            var ok = await RunFfmpeg($"-y -ss {startTime} -to {endTime} -i \"{_file}\" -map 0:v:0? -map 0:a? -sn -dn -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -minrate {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bufSizeKbps}k -c:a copy -movflags +faststart \"{outFile}\"");
+            var processVideo = VideoCheck.IsChecked == true;
+            var processAudio = AudioCheck.IsChecked == true;
+            if (!processVideo && !processAudio)
+            {
+                Log("Export skipped: both Video and Audio are disabled.");
+                return;
+            }
+            var args = processVideo
+                ? $"-y -ss {startTime} -to {endTime} -i \"{_file}\" -map 0:v:0? {(processAudio ? "-map 0:a?" : "")} -sn -dn -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -minrate {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bufSizeKbps}k {(processAudio ? "-c:a copy" : "-an")} -movflags +faststart \"{outFile}\""
+                : $"-y -ss {startTime} -to {endTime} -i \"{_file}\" -map 0:a? -vn -c:a copy \"{outFile}\"";
+            var ok = await RunFfmpeg(args);
             if (!ok)
             {
                 if (File.Exists(outFile)) File.Delete(outFile);
@@ -361,7 +400,7 @@ namespace AI_Video_ToolKit.UI
 
         private void IncreaseSpeedHotkey() { if (_speedIndex < _speeds.Length - 1) _speedIndex++; SpeedCombo.SelectedIndex = _speedIndex; UpdateSpeedUI(); if (_isPlaying) PlayFrom(_current); }
         private void ResetSpeedHotkey() { _speedIndex = 0; SpeedCombo.SelectedIndex = 0; UpdateSpeedUI(); if (_isPlaying) PlayFrom(_current); }
-        private void UpdateSpeedUI() => SpeedText.Text = $"x{Speed}";
+        private void UpdateSpeedUI() { }
         private void SetPlayState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.Green; }
         private void SetPauseState() { PlayIcon.Text = "⏸"; PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow; }
         private void SetIdleState() { PlayIcon.Text = "▶"; PlayIcon.Foreground = System.Windows.Media.Brushes.White; _isPlaying = false; }
@@ -371,7 +410,18 @@ namespace AI_Video_ToolKit.UI
             ResolutionText.Text = $"Resolution: {_width}x{_height}";
             FpsText.Text = $"FPS: {_fps:0.##}";
             CodecText.Text = $"Codec: {_codec}";
+            BitrateText.Text = $"Bitrate: {Math.Round(_videoBitrate / 1000.0):0} kbps";
             DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
+            AudioInfoText.Text = _hasAudio ? "Audio: available" : "Audio: none";
+        }
+
+        private void RefreshMontagePanel()
+        {
+            MontageList.Items.Clear();
+            var cutDir = Path.Combine(Directory.GetCurrentDirectory(), "Cut");
+            if (!Directory.Exists(cutDir)) return;
+            foreach (var f in Directory.GetFiles(cutDir).OrderBy(x => x))
+                MontageList.Items.Add(Path.GetFileName(f));
         }
 
         private async void HandlePlaybackEnd()
@@ -415,6 +465,30 @@ namespace AI_Video_ToolKit.UI
             return TimeSpan.FromSeconds(frame / _fps);
         }
 
+        private void MoveSelectedMarkerByFrames(int frames)
+        {
+            if (Timeline.SelectedMarkerTime == null) return;
+            var moved = ClampToDuration(FrameToTime(TimeToFrame(Timeline.SelectedMarkerTime.Value) + frames));
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Input) _inputMarker = moved;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Output) _outputMarker = moved;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Cut)
+            {
+                _cutMarkers.Remove(Timeline.SelectedMarkerTime.Value);
+                _cutMarkers.Add(moved);
+                _cutMarkers.Sort();
+            }
+            RefreshMarkers();
+        }
+
+        private void DeleteSelectedMarker()
+        {
+            if (Timeline.SelectedMarkerTime == null) return;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Input) _inputMarker = null;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Output) _outputMarker = null;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Cut) _cutMarkers.Remove(Timeline.SelectedMarkerTime.Value);
+            RefreshMarkers();
+        }
+
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
@@ -451,8 +525,9 @@ namespace AI_Video_ToolKit.UI
                 RefreshMarkers();
                 e.Handled = true; return;
             }
-            if (e.Key == Key.Right) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); e.Handled = true; return; }
-            if (e.Key == Key.Left) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); e.Handled = true; return; }
+            if (e.Key == Key.Delete) { DeleteSelectedMarker(); e.Handled = true; return; }
+            if (e.Key == Key.Right) { if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None) MoveSelectedMarkerByFrames(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); else Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); e.Handled = true; return; }
+            if (e.Key == Key.Left) { if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None) MoveSelectedMarkerByFrames(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); else Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); e.Handled = true; return; }
             if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
         }
 
