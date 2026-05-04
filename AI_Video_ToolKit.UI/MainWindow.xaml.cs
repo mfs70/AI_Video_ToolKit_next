@@ -13,10 +13,10 @@ namespace AI_Video_ToolKit.UI
 {
     public partial class MainWindow : Window
     {
-        private sealed record Segment(int Index, TimeSpan Start, TimeSpan End)
+        private sealed record Segment(int Index, TimeSpan Start, TimeSpan End, long StartFrame, long EndFrame)
         {
             public TimeSpan Duration => End - Start;
-            public override string ToString() => $"#{Index}  {Start:hh\\:mm\\:ss\\.fff} - {End:hh\\:mm\\:ss\\.fff} ({Duration:hh\\:mm\\:ss\\.fff})";
+            public override string ToString() => $"{Index:000}_{Start:hh\\:mm\\:ss\\.fff}_{End:hh\\:mm\\:ss\\.fff} ({Duration:hh\\:mm\\:ss\\.fff})";
         }
 
         private enum MarkerActionType { InputSet, OutputSet, CutAdd, CutClear }
@@ -44,6 +44,17 @@ namespace AI_Video_ToolKit.UI
         private int _height;
         private long _totalFrames;
         private string _codec = "";
+        private long _videoBitrate;
+
+        private TimeSpan? _inputMarker;
+        private TimeSpan? _outputMarker;
+        private readonly List<TimeSpan> _cutMarkers = new();
+        private readonly Stack<MarkerAction> _undoStack = new();
+        private readonly List<Segment> _segments = new();
+        private Segment? _selectedSegment;
+
+        private TimeSpan _playbackRangeStart = TimeSpan.Zero;
+        private TimeSpan _playbackRangeEnd = TimeSpan.MaxValue;
 
         private TimeSpan? _inputMarker;
         private TimeSpan? _outputMarker;
@@ -63,6 +74,13 @@ namespace AI_Video_ToolKit.UI
                 _currentFrame = TimeToFrame(_current);
                 Timeline.SetCurrentTime(_current);
                 Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+
+                if (_isPlaying && _current >= _playbackRangeEnd)
+                {
+                    _player.Pause();
+                    _isPlaying = false;
+                    SetPauseState();
+                }
             });
             _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
@@ -89,11 +107,13 @@ namespace AI_Video_ToolKit.UI
             SegmentList.Items.Clear();
             if (_duration <= 0) return;
 
-            var points = new List<TimeSpan> { TimeSpan.Zero };
-            if (_inputMarker.HasValue) points.Add(_inputMarker.Value);
-            points.AddRange(_cutMarkers.OrderBy(x => x));
-            if (_outputMarker.HasValue) points.Add(_outputMarker.Value);
-            points.Add(TimeSpan.FromSeconds(_duration));
+            var startBound = _inputMarker ?? TimeSpan.Zero;
+            var endBound = _outputMarker ?? TimeSpan.FromSeconds(_duration);
+            if (endBound <= startBound) return;
+
+            var points = new List<TimeSpan> { startBound };
+            points.AddRange(_cutMarkers.Where(c => c > startBound && c < endBound).OrderBy(x => x));
+            points.Add(endBound);
 
             points = points.Distinct().OrderBy(x => x).ToList();
 
@@ -101,12 +121,30 @@ namespace AI_Video_ToolKit.UI
             for (int i = 0; i < points.Count - 1; i++)
             {
                 if (points[i + 1] <= points[i]) continue;
-                var seg = new Segment(idx++, points[i], points[i + 1]);
+                var sf = TimeToFrame(points[i]);
+                var ef = TimeToFrame(points[i + 1]);
+                var seg = new Segment(idx++, points[i], points[i + 1], sf, ef);
                 _segments.Add(seg);
                 SegmentList.Items.Add(seg.ToString());
             }
 
+            if (_selectedSegment != null)
+            {
+                _selectedSegment = _segments.FirstOrDefault(s => s.Index == _selectedSegment.Index);
+            }
+
             Log($"Segments rebuilt: {_segments.Count}");
+        }
+
+        private (TimeSpan start, TimeSpan end) ResolvePlaybackRange()
+        {
+            if (_selectedSegment != null)
+                return (_selectedSegment.Start, _selectedSegment.End);
+
+            var start = _inputMarker ?? TimeSpan.Zero;
+            var end = _outputMarker ?? TimeSpan.FromSeconds(_duration);
+            if (end <= start) end = TimeSpan.FromSeconds(_duration);
+            return (start, end);
         }
 
         private async void Load_Click(object? sender, RoutedEventArgs? e)
@@ -127,6 +165,7 @@ namespace AI_Video_ToolKit.UI
             _height = info.height;
             _fps = info.fps > 1 ? info.fps : 25;
             _codec = info.codec;
+            _videoBitrate = info.videoBitrate;
 
             _totalFrames = (long)Math.Round(_duration * _fps);
             _current = TimeSpan.Zero;
@@ -136,6 +175,7 @@ namespace AI_Video_ToolKit.UI
             _outputMarker = null;
             _cutMarkers.Clear();
             _undoStack.Clear();
+            _selectedSegment = null;
 
             Timeline.SetDuration(_duration);
             Timeline.SetCurrentTime(_current);
@@ -154,8 +194,17 @@ namespace AI_Video_ToolKit.UI
         private void PlayFrom(TimeSpan time)
         {
             if (_file == null) return;
+
+            var range = ResolvePlaybackRange();
+            _playbackRangeStart = range.start;
+            _playbackRangeEnd = range.end;
+
+            var start = ClampToDuration(time);
+            if (start < _playbackRangeStart || start >= _playbackRangeEnd)
+                start = _playbackRangeStart;
+
             _player.Stop();
-            _current = ClampToDuration(time);
+            _current = start;
             _currentFrame = TimeToFrame(_current);
             _player.Start(_file, 1280, 720, _fps, _current, Speed);
             _isPlaying = true;
@@ -233,9 +282,9 @@ namespace AI_Video_ToolKit.UI
 
         private async void ExportSelected_Click(object sender, RoutedEventArgs e)
         {
-            if (SegmentList.SelectedIndex < 0 || SegmentList.SelectedIndex >= _segments.Count) return;
-            await ExportSegment(_segments[SegmentList.SelectedIndex]);
-            Log($"Export selected complete: {_segments[SegmentList.SelectedIndex]}");
+            if (_selectedSegment == null) return;
+            await ExportSegment(_selectedSegment);
+            Log($"Export selected complete: {_selectedSegment}");
         }
 
         private async System.Threading.Tasks.Task ExportSegment(Segment seg)
@@ -247,29 +296,35 @@ namespace AI_Video_ToolKit.UI
 
             var srcName = Path.GetFileNameWithoutExtension(_file);
             var ext = Path.GetExtension(_file);
-            var outFile = Path.Combine(cutDir, $"{srcName}_{seg.Index}{ext}");
+            var outFile = Path.Combine(cutDir, $"{seg.Index:000}_{srcName}_{seg.StartFrame}_{seg.EndFrame}{ext}");
 
-            var ok = await RunFfmpeg($"-y -ss {seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -to {seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -i \"{_file}\" -c copy \"{outFile}\"");
+            var startTime = seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var bitrateKbps = Math.Max(1500, (int)Math.Round((_videoBitrate > 0 ? _videoBitrate : 4_000_000) / 1000.0));
+            var bufSizeKbps = bitrateKbps * 2;
+            var ok = await RunFfmpeg($"-y -ss {startTime} -to {endTime} -i \"{_file}\" -map 0:v:0? -map 0:a? -sn -dn -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -minrate {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bufSizeKbps}k -c:a copy -movflags +faststart \"{outFile}\"");
             if (!ok)
             {
-                Log($"copy failed for segment {seg.Index}, fallback to re-encode");
-                await RunFfmpeg($"-y -ss {seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -to {seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} -i \"{_file}\" -c:v libx264 -preset veryfast -crf 18 -c:a aac -b:a 192k \"{outFile}\"");
+                if (File.Exists(outFile)) File.Delete(outFile);
+                Log($"copy cut failed for segment {seg.Index}. Output removed.");
             }
         }
 
         private async void PreviewSegment_Click(object sender, RoutedEventArgs e)
         {
-            if (SegmentList.SelectedIndex < 0 || SegmentList.SelectedIndex >= _segments.Count) return;
-            var seg = _segments[SegmentList.SelectedIndex];
-            _current = seg.Start;
-            _currentFrame = TimeToFrame(_current);
+            if (_selectedSegment == null) return;
+            _current = _selectedSegment.Start;
+            _currentFrame = _selectedSegment.StartFrame;
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
             await ShowFrameByCurrentFrame();
             if (_isPlaying) PlayFrom(_current);
         }
 
-        private void SegmentList_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+        private void SegmentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            _selectedSegment = SegmentList.SelectedIndex >= 0 && SegmentList.SelectedIndex < _segments.Count ? _segments[SegmentList.SelectedIndex] : null;
+        }
 
         private void UndoMarker_Click(object sender, RoutedEventArgs e) => UndoMarker();
         private void ClearCuts_Click(object sender, RoutedEventArgs e)
@@ -330,17 +385,15 @@ namespace AI_Video_ToolKit.UI
             if (_isHandlingPlaybackEnd) return;
             _isHandlingPlaybackEnd = true;
             _player.Stop();
-            _current = TimeSpan.FromSeconds(_duration);
-            _currentFrame = _totalFrames;
+            _current = _playbackRangeEnd <= TimeSpan.FromSeconds(_duration) ? _playbackRangeEnd : TimeSpan.FromSeconds(_duration);
+            _currentFrame = TimeToFrame(_current);
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
             await ShowFrameByCurrentFrame();
             if (LoopCheck.IsChecked == true)
             {
                 _isHandlingPlaybackEnd = false;
-                _current = TimeSpan.Zero;
-                _currentFrame = 0;
-                PlayFrom(_current);
+                PlayFrom(_playbackRangeStart);
                 return;
             }
             _isPlaying = false;

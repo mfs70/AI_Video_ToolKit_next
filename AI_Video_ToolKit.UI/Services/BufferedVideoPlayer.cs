@@ -194,6 +194,9 @@ namespace AI_Video_ToolKit.UI.Services
             {
                 // Normal on stop.
             }
+            finally
+            {
+            }
         }
 
         public void Pause()
