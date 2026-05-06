@@ -21,7 +21,7 @@ namespace AI_Video_ToolKit.UI
     /// - Монтажный стол (внизу)
     /// - Нарезку видео маркерами (I, O, C, Delete, Undo)
     /// - Экспорт отрезков
-    /// - Воспроизведение видео с аудио (через NAudio, DirectShow)
+    /// - Воспроизведение видео с аудио (через FFmpeg → стерео PCM)
     /// - Отображение полных параметров аудио (кодек, частота, каналы, битрейт)
     /// </summary>
     public partial class MainWindow : Window
@@ -117,7 +117,7 @@ namespace AI_Video_ToolKit.UI
         {
             InitializeComponent();
 
-            // Подключаем лог для BufferedVideoPlayer
+            // Лог для отладки аудио
             _player.LogCallback = Log;
 
             // Подписка на события плеера
@@ -137,9 +137,14 @@ namespace AI_Video_ToolKit.UI
             });
             _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
+            // Подписка на таймлайн
             Timeline.OnChanged += Timeline_Changed;
 
-            Log("MainWindow initialized. Ready for multiple file loading with audio support.");
+            // Подписка на изменение чекбокса "Аудио"
+            AudioCheck.Checked += AudioCheck_CheckedChanged;
+            AudioCheck.Unchecked += AudioCheck_CheckedChanged;
+
+            Log("MainWindow initialized. Ready for multiple file loading with multi‑channel audio support.");
             AllowDrop = true;
             Drop += Window_Drop;
         }
@@ -674,6 +679,33 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
+        #region ========== ОБРАБОТЧИК ИЗМЕНЕНИЯ ЧЕКБОКСА "АУДИО" ==========
+
+        private void AudioCheck_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (_file == null) return;
+
+            bool enable = AudioCheck.IsChecked == true;
+            if (enable && !_hasAudio)
+            {
+                Log("Audio cannot be enabled: no audio stream in file.");
+                AudioCheck.IsChecked = false;
+                return;
+            }
+
+            // Перезапускаем плеер с текущей позиции с новым состоянием аудио
+            if (_isPlaying)
+                PlayFrom(_current);
+            else
+            {
+                _player.Stop();
+                _player.Start(_file, 1280, 720, _fps, _current, Speed, enable);
+            }
+            Log(enable ? "Audio enabled." : "Audio disabled.");
+        }
+
+        #endregion
+
         #region ========== DRAG & DROP ОБРАБОТЧИКИ ==========
 
         private void Playlist_Drop(object sender, DragEventArgs e)
@@ -968,13 +1000,21 @@ namespace AI_Video_ToolKit.UI
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            // Пробел - Play/Pause
             if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
+            // K - Pause
             if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); } e.Handled = true; return; }
+            // S - Stop
             if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
+            // Ctrl+L - Load multiple files
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(null, null); e.Handled = true; return; }
+            // L (без Ctrl) - Increase speed
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeedHotkey(); e.Handled = true; return; }
+            // J - Decrease speed
             if (e.Key == Key.J && Keyboard.Modifiers == ModifierKeys.None) { DecreaseSpeedHotkey(); e.Handled = true; return; }
+            // Ctrl+Z - Undo
             if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { UndoMarker(); e.Handled = true; return; }
+            // I - Set input marker
             if (e.Key == Key.I)
             {
                 _undoStack.Push(new MarkerAction(MarkerActionType.InputSet, _inputMarker));
@@ -984,6 +1024,7 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
+            // O - Set output marker
             if (e.Key == Key.O)
             {
                 _undoStack.Push(new MarkerAction(MarkerActionType.OutputSet, _outputMarker));
@@ -993,6 +1034,7 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
+            // C - Add cut marker
             if (e.Key == Key.C)
             {
                 var p = _current;
@@ -1005,7 +1047,9 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
+            // Delete - Delete selected marker
             if (e.Key == Key.Delete) { DeleteSelectedMarker(); e.Handled = true; return; }
+            // Right/Left - Move marker or step
             if (e.Key == Key.Right)
             {
                 if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None)
@@ -1022,8 +1066,11 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
+            // R - Toggle Loop
             if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
+            // F5 - Previous in playlist
             if (e.Key == Key.F5 && _playlistItems.Count > 0) { Previous_Click(null, null); e.Handled = true; return; }
+            // F6 - Next in playlist
             if (e.Key == Key.F6 && _playlistItems.Count > 0) { Next_Click(null, null); e.Handled = true; return; }
         }
 
