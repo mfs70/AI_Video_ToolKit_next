@@ -16,7 +16,7 @@
     
     <Window.Resources>
         
-        <!-- Стиль для синих кнопок -->
+        <!-- Стиль для синих кнопок (основные действия) -->
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="#3a6ea5"/>
             <Setter Property="Foreground" Value="White"/>
@@ -40,7 +40,7 @@
             </Setter>
         </Style>
 
-        <!-- Стиль для серых кнопок -->
+        <!-- Стиль для второстепенных серых кнопок -->
         <Style x:Key="SecondaryButton" TargetType="Button">
             <Setter Property="Background" Value="#2c2c2c"/>
             <Setter Property="Foreground" Value="#e0e0e0"/>
@@ -69,7 +69,7 @@
             </Setter>
         </Style>
 
-        <!-- Стиль для круглых кнопок транспорта -->
+        <!-- Стиль для круглых кнопок транспорта (Play, Stop, Prev, Next) -->
         <Style x:Key="TransportButton" TargetType="Button">
             <Setter Property="Width" Value="42"/>
             <Setter Property="Height" Value="42"/>
@@ -93,7 +93,7 @@
             </Setter>
         </Style>
 
-        <!-- Стиль для кнопки загрузки -->
+        <!-- Стиль для кнопки загрузки файлов (с папкой) -->
         <Style x:Key="LoadButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="42"/>
             <Setter Property="Height" Value="42"/>
@@ -118,7 +118,7 @@
             </Setter>
         </Style>
 
-        <!-- Компактный стиль для ComboBox скорости -->
+        <!-- Компактный ComboBox для выбора скорости -->
         <Style x:Key="CompactSpeedComboBox" TargetType="ComboBox">
             <Setter Property="Width" Value="55"/>
             <Setter Property="Height" Value="30"/>
@@ -132,7 +132,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- Стиль для элементов выпадающего списка -->
+        <!-- Стиль для элементов выпадающего списка ComboBox -->
         <Style TargetType="ComboBoxItem">
             <Setter Property="Background" Value="#2c2c2c"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
@@ -146,12 +146,12 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Стиль для плейлиста -->
-        <Style x:Key="PlaylistStyle" TargetType="ListBox">
+        <!-- Базовый стиль для ListBox (плейлист, сегменты, лог) -->
+        <Style TargetType="ListBox">
             <Setter Property="Background" Value="#0c0c0c"/>
             <Setter Property="BorderBrush" Value="#3a3a3a"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
 
@@ -178,7 +178,7 @@
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
-        <!-- Стиль для GroupBox -->
+        <!-- Стиль для GroupBox (обводка панелей) -->
         <Style TargetType="GroupBox">
             <Setter Property="BorderBrush" Value="#444"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -191,30 +191,29 @@
 
     </Window.Resources>
 
-    <!-- ==================== ОСНОВНОЙ GRID ==================== -->
+    <!-- Основной контейнер с разбивкой на строки -->
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>      <!-- Main content (Playlist + Player + Right Panel) -->
-            <RowDefinition Height="Auto"/>   <!-- Video info -->
-            <RowDefinition Height="Auto"/>   <!-- Transport -->
-            <RowDefinition Height="Auto"/>   <!-- Timeline -->
-            <RowDefinition Height="Auto"/>   <!-- Montage list -->
-            <RowDefinition Height="Auto"/>   <!-- Status bar -->
+            <RowDefinition Height="*"/>      <!-- Основная область: плейлист + плеер + правая панель -->
+            <RowDefinition Height="Auto"/>   <!-- Метаданные видео -->
+            <RowDefinition Height="Auto"/>   <!-- Панель транспорта -->
+            <RowDefinition Height="Auto"/>   <!-- Таймлайн -->
+            <RowDefinition Height="Auto"/>   <!-- Монтажный стол -->
+            <RowDefinition Height="Auto"/>   <!-- Строка состояния -->
         </Grid.RowDefinitions>
 
-        <!-- ==================== ROW 0: MAIN AREA ==================== -->
+        <!--==================== ROW 0: ОСНОВНАЯ ОБЛАСТЬ ====================-->
         <Grid Grid.Row="0" Margin="10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.2*"/>   <!-- Плейлист (25% ширины) -->
-                <ColumnDefinition Width="Auto"/>   <!-- Разделитель -->
-                <ColumnDefinition Width="3*"/>      <!-- Видео плеер -->
-                <ColumnDefinition Width="Auto"/>   <!-- Разделитель -->
-                <ColumnDefinition Width="1.2*"/>    <!-- Правая панель -->
+                <ColumnDefinition Width="1.2*"/>   <!-- Плейлист (≈25%) -->
+                <ColumnDefinition Width="Auto"/>    <!-- Разделитель -->
+                <ColumnDefinition Width="3*"/>      <!-- Видеоплеер -->
+                <ColumnDefinition Width="Auto"/>    <!-- Разделитель -->
+                <ColumnDefinition Width="1.2*"/>    <!-- Правая панель (лог, сегменты, кнопки) -->
             </Grid.ColumnDefinitions>
 
-            <!-- ===== ПАНЕЛЬ ПЛЕЙЛИСТА (Слева от плеера) ===== -->
-            <Border Grid.Column="0" Background="#121212" BorderBrush="#3a3a3a" 
-                    BorderThickness="1" CornerRadius="6">
+            <!-- ========== ПАНЕЛЬ ПЛЕЙЛИСТА ========== -->
+            <Border Grid.Column="0" Background="#121212" BorderBrush="#3a3a3a" BorderThickness="1" CornerRadius="6">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -222,7 +221,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- Заголовок плейлиста -->
+                    <!-- Заголовок -->
                     <Border Grid.Row="0" Background="#1a1a1a" CornerRadius="6,6,0,0" Padding="8,6">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📋 Playlist" Foreground="#4c9aff" FontSize="12" FontWeight="Bold"/>
@@ -257,7 +256,7 @@
             <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" 
                           VerticalAlignment="Stretch" Background="#3a3a3a"/>
 
-            <!-- ===== ВИДЕО ПЛЕЕР (Центральная область) ===== -->
+            <!-- ========== ВИДЕО ПЛЕЕР ========== -->
             <Border Grid.Column="2" Background="#000000" BorderBrush="#3a3a3a" 
                     BorderThickness="1" CornerRadius="8" AllowDrop="True"
                     Drop="Player_Drop" DragOver="Player_DragOver">
@@ -268,21 +267,21 @@
             <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Center" 
                           VerticalAlignment="Stretch" Background="#3a3a3a"/>
 
-            <!-- ===== ПРАВАЯ ПАНЕЛЬ (Logger + Segments + Actions) ===== -->
+            <!-- ========== ПРАВАЯ ПАНЕЛЬ (Лог, Сегменты, Действия) ========== -->
             <StackPanel Grid.Column="4" Orientation="Vertical">
                 
-                <!-- Logger -->
+                <!-- Логгер -->
                 <GroupBox Header="📋 Logger (Console Output)" Height="180">
                     <ListBox x:Name="LogList" Background="#0c0c0c" Foreground="#a5e1a5" FontSize="10"/>
                 </GroupBox>
 
-                <!-- Segments List -->
+                <!-- Список отрезков -->
                 <GroupBox Header="✂️ Segments (Cut Points)" Height="160">
                     <ListBox x:Name="SegmentList" Background="#0c0c0c" Foreground="#e0e0e0" 
                              SelectionChanged="SegmentList_SelectionChanged"/>
                 </GroupBox>
 
-                <!-- Actions -->
+                <!-- Кнопки действий -->
                 <GroupBox Header="🎬 Actions">
                     <StackPanel>
                         <WrapPanel Margin="0,0,0,6">
@@ -293,7 +292,6 @@
                                     <TextBlock Text="Preview" FontSize="11"/>
                                 </StackPanel>
                             </Button>
-                            
                             <Button x:Name="ExportSelectedBtn" Click="ExportSelected_Click" 
                                     Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Width="90">
                                 <StackPanel Orientation="Horizontal">
@@ -301,7 +299,6 @@
                                     <TextBlock Text="Export Sel" FontSize="11"/>
                                 </StackPanel>
                             </Button>
-                            
                             <Button x:Name="ExportAllBtn" Click="Cut_Click" 
                                     Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Width="90">
                                 <StackPanel Orientation="Horizontal">
@@ -319,7 +316,6 @@
                                     <TextBlock Text="Merge Sel" FontSize="11"/>
                                 </StackPanel>
                             </Button>
-                            
                             <Button x:Name="UndoMarkerBtn" Click="UndoMarker_Click" 
                                     Style="{StaticResource SecondaryButton}" Margin="0,0,6,0" Width="125">
                                 <StackPanel Orientation="Horizontal">
@@ -327,7 +323,6 @@
                                     <TextBlock Text="Undo (Ctrl+Z)" FontSize="11"/>
                                 </StackPanel>
                             </Button>
-                            
                             <Button x:Name="ClearCutsBtn" Click="ClearCuts_Click" 
                                     Style="{StaticResource SecondaryButton}" Width="105">
                                 <StackPanel Orientation="Horizontal">
@@ -337,6 +332,7 @@
                             </Button>
                         </WrapPanel>
                         
+                        <!-- Индикатор прогресса экспорта -->
                         <ProgressBar x:Name="ExportProgress" Margin="0,6,0,0" Height="4" 
                                      Minimum="0" Maximum="100" Value="0"/>
                     </StackPanel>
@@ -344,7 +340,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- ==================== ROW 1: VIDEO INFO ==================== -->
+        <!--==================== ROW 1: МЕТАДАННЫЕ ВИДЕО ====================-->
         <Grid Grid.Row="1" Background="#252526">
             <WrapPanel Margin="10,6" HorizontalAlignment="Left">
                 <TextBlock x:Name="FileNameText" Foreground="#ffaa66" FontSize="12" 
@@ -358,7 +354,7 @@
             </WrapPanel>
         </Grid>
 
-        <!-- ==================== ROW 2: TRANSPORT ==================== -->
+        <!--==================== ROW 2: ПАНЕЛЬ ТРАНСПОРТА ====================-->
         <Grid Grid.Row="2" Background="#1a1a1a">
             <Grid Margin="10,8">
                 <Grid.ColumnDefinitions>
@@ -367,7 +363,7 @@
                     <ColumnDefinition Width="Auto"/>   <!-- Next -->
                     <ColumnDefinition Width="Auto"/>   <!-- Stop -->
                     <ColumnDefinition Width="Auto"/>   <!-- Load -->
-                    <ColumnDefinition Width="Auto"/>   <!-- Молния -->
+                    <ColumnDefinition Width="Auto"/>   <!-- Lightning -->
                     <ColumnDefinition Width="Auto"/>   <!-- Speed Combo -->
                     <ColumnDefinition Width="*"/>      <!-- Spacer -->
                     <ColumnDefinition Width="Auto"/>   <!-- Time -->
@@ -378,32 +374,28 @@
                         Style="{StaticResource TransportButton}" Grid.Column="0" Margin="0,0,8,0">
                     <TextBlock Text="⏮" FontSize="16"/>
                 </Button>
-                
                 <Button x:Name="PlayPauseBtn" Click="TogglePlayPause_Click" 
                         Style="{StaticResource TransportButton}" Grid.Column="1" Margin="0,0,8,0">
                     <TextBlock x:Name="PlayIcon" Text="▶" FontSize="20"/>
                 </Button>
-                
                 <Button x:Name="NextBtn" Click="Next_Click" 
                         Style="{StaticResource TransportButton}" Grid.Column="2" Margin="0,0,8,0">
                     <TextBlock Text="⏭" FontSize="16"/>
                 </Button>
-                
                 <Button x:Name="StopBtn" Click="Stop_Click" 
                         Style="{StaticResource TransportButton}" Grid.Column="3" Margin="0,0,8,0">
                     <TextBlock Text="■" FontSize="18"/>
                 </Button>
-                
                 <Button x:Name="LoadButton" Click="LoadMultiple_Click" 
                         Style="{StaticResource LoadButtonStyle}" Grid.Column="4" Margin="0,0,15,0">
                     <TextBlock Text="📂" FontSize="18"/>
                 </Button>
 
-                <!-- Жёлтая молния -->
+                <!-- Жёлтая молния - индикатор скорости -->
                 <TextBlock Grid.Column="5" Text="⚡" Foreground="#FFD700" FontSize="16" 
                            VerticalAlignment="Center" Margin="0,0,4,0"/>
 
-                <!-- Компактный ComboBox скорости -->
+                <!-- Выбор скорости -->
                 <ComboBox x:Name="SpeedCombo" Grid.Column="6" Style="{StaticResource CompactSpeedComboBox}"
                           SelectionChanged="SpeedCombo_SelectionChanged" 
                           VerticalAlignment="Center" HorizontalAlignment="Left">
@@ -414,7 +406,7 @@
                     <ComboBoxItem Content="16x"/>
                 </ComboBox>
 
-                <!-- Отображение времени -->
+                <!-- Текущее время / общая длительность -->
                 <StackPanel Orientation="Horizontal" Grid.Column="8" VerticalAlignment="Center" Margin="20,0">
                     <TextBlock x:Name="CurrentTimeText" Text="00:00:00" Foreground="#4c9aff" 
                                FontFamily="Consolas" FontSize="14" FontWeight="Bold"/>
@@ -423,7 +415,7 @@
                                FontFamily="Consolas" FontSize="12"/>
                 </StackPanel>
 
-                <!-- Опции воспроизведения -->
+                <!-- Опции видео/аудио, зацикливание -->
                 <StackPanel Orientation="Horizontal" Grid.Column="9" VerticalAlignment="Center" Margin="15,0,0,0">
                     <CheckBox x:Name="VideoCheck" Content="🎥 Video" IsChecked="True" 
                               Foreground="#CCCCCC" Margin="0,0,15,0" FontSize="12"/>
@@ -435,7 +427,7 @@
             </Grid>
         </Grid>
 
-        <!-- ==================== ROW 3: TIMELINE ==================== -->
+        <!--==================== ROW 3: ТАЙМЛАЙН ====================-->
         <Grid Grid.Row="3" Background="#161616">
             <Grid Margin="10,8">
                 <Grid.ColumnDefinitions>
@@ -443,12 +435,9 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                
                 <TextBlock Text="Timeline" Foreground="#888" FontSize="10" 
                            VerticalAlignment="Center" Margin="0,0,10,0"/>
-                
                 <controls:TimelineControl x:Name="Timeline" Grid.Column="1"/>
-                
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0,0,0">
                     <Button x:Name="ZoomInBtn" Style="{StaticResource SecondaryButton}" 
                             Width="30" Height="26" Margin="0,0,6,0">
@@ -462,7 +451,7 @@
             </Grid>
         </Grid>
 
-        <!-- ==================== ROW 4: MONTAGE LIST (Монтажный стол) ==================== -->
+        <!--==================== ROW 4: МОНТАЖНЫЙ СТОЛ ====================-->
         <Grid Grid.Row="4" Margin="10,5,10,5" AllowDrop="True"
               Drop="MontageTable_Drop" DragOver="MontageTable_DragOver">
             <Border BorderBrush="#3a3a3a" BorderThickness="1" CornerRadius="6" Background="#121212">
@@ -471,7 +460,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    
+                    <!-- Заголовок -->
                     <Border Grid.Row="0" Background="#1a1a1a" CornerRadius="6,6,0,0" Padding="8,6">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🎬 Montage Table" Foreground="#4c9aff" FontSize="11" FontWeight="Bold"/>
@@ -481,7 +470,7 @@
                             </Border>
                         </StackPanel>
                     </Border>
-                    
+                    <!-- Список монтажа -->
                     <ListBox x:Name="MontageList" Grid.Row="1" Background="#121212" 
                              MinHeight="70" MaxHeight="100" BorderThickness="0"
                              AllowDrop="True" Drop="MontageList_Drop" DragOver="MontageList_DragOver"/>
@@ -489,7 +478,7 @@
             </Border>
         </Grid>
 
-        <!-- ==================== ROW 5: STATUS BAR ==================== -->
+        <!--==================== ROW 5: СТРОКА СОСТОЯНИЯ ====================-->
         <Grid Grid.Row="5" Background="#1a1a1a">
             <Grid Margin="8,4">
                 <Grid.ColumnDefinitions>
@@ -497,10 +486,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                
                 <TextBlock x:Name="StatusText" Text="✅ Ready | Drop files or folders to playlist / montage table" 
                            Foreground="#888" FontSize="10"/>
-                
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <TextBlock Text="⚡ " Foreground="#FFD700" FontSize="10"/>
                     <TextBlock x:Name="FrameCountText" Text="0 frames" Foreground="#CCCCCC" FontSize="10" Margin="0,0,10,0"/>

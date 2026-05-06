@@ -26,30 +26,19 @@ namespace AI_Video_ToolKit.UI
     /// </summary>
     public partial class MainWindow : Window
     {
-        #region ========== ВЛОЖЕННЫЕ ТИПЫ (Records / Enums) ==========
+        #region ========== ВЛОЖЕННЫЕ ТИПЫ ==========
 
-        /// <summary>
-        /// Модель отрезка видео для нарезки
-        /// </summary>
+        /// <summary>Модель отрезка видео для нарезки</summary>
         private sealed record Segment(int Index, TimeSpan Start, TimeSpan End, long StartFrame, long EndFrame)
         {
             public TimeSpan Duration => End - Start;
             public override string ToString() => $"{Index:000}_{Start:hh\\:mm\\:ss\\.fff}_{End:hh\\:mm\\:ss\\.fff} ({Duration:hh\\:mm\\:ss\\.fff})";
         }
 
-        /// <summary>
-        /// Типы действий для системы Undo/Redo
-        /// </summary>
         private enum MarkerActionType { InputSet, OutputSet, CutAdd, CutClear }
-
-        /// <summary>
-        /// Запись действия для Undo стека
-        /// </summary>
         private readonly record struct MarkerAction(MarkerActionType Type, TimeSpan? Value, List<TimeSpan>? SnapshotCuts = null);
 
-        /// <summary>
-        /// Модель элемента плейлиста (поддерживает видео и изображения)
-        /// </summary>
+        /// <summary>Элемент плейлиста (видео или изображение)</summary>
         public class PlaylistItem
         {
             public string FilePath { get; set; } = "";
@@ -58,12 +47,9 @@ namespace AI_Video_ToolKit.UI
             public bool IsVideo => Extension == ".mp4" || Extension == ".mkv" || Extension == ".mov" || Extension == ".avi" || Extension == ".webm";
             public bool IsImage => Extension == ".jpg" || Extension == ".jpeg" || Extension == ".png" || Extension == ".bmp" || Extension == ".gif";
             public string TypeIcon => IsVideo ? "🎬" : (IsImage ? "🖼️" : "📄");
-            public BitmapImage? Thumbnail { get; set; }
         }
 
-        /// <summary>
-        /// Модель элемента монтажного стола
-        /// </summary>
+        /// <summary>Элемент монтажного стола</summary>
         public class MontageItem
         {
             public string FilePath { get; set; } = "";
@@ -77,23 +63,19 @@ namespace AI_Video_ToolKit.UI
 
         #region ========== ПОЛЯ И СВОЙСТВА ==========
 
-        // Сервисы
         private readonly BufferedVideoPlayer _player = new();
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
 
-        // Переменные текущего видео
         private string? _file;
         private double _duration;
         private double _fps = 25;
-        private int _width;
-        private int _height;
+        private int _width, _height;
         private long _totalFrames;
         private string _codec = "";
         private long _videoBitrate;
         private bool _hasAudio;
 
-        // Состояние воспроизведения
         private TimeSpan _current = TimeSpan.Zero;
         private long _currentFrame;
         private bool _isPlaying;
@@ -101,24 +83,19 @@ namespace AI_Video_ToolKit.UI
         private TimeSpan _playbackRangeStart = TimeSpan.Zero;
         private TimeSpan _playbackRangeEnd = TimeSpan.MaxValue;
 
-        // Скорость воспроизведения
         private readonly double[] _speeds = { 1, 2, 4, 8, 16 };
         private int _speedIndex;
         private double Speed => _speeds[_speedIndex];
 
-        // Маркеры и отрезки
-        private TimeSpan? _inputMarker;
-        private TimeSpan? _outputMarker;
+        private TimeSpan? _inputMarker, _outputMarker;
         private readonly List<TimeSpan> _cutMarkers = new();
         private readonly Stack<MarkerAction> _undoStack = new();
         private readonly List<Segment> _segments = new();
         private Segment? _selectedSegment;
 
-        // Плейлист
         private readonly List<PlaylistItem> _playlistItems = new();
         private int _currentPlaylistIndex = -1;
 
-        // Монтажный стол
         private readonly List<MontageItem> _montageItems = new();
 
         #endregion
@@ -129,8 +106,6 @@ namespace AI_Video_ToolKit.UI
         {
             InitializeComponent();
 
-            UpdateSpeedUI();
-
             _player.OnFrame += f => Dispatcher.Invoke(() => Preview.SetFrame(f));
             _player.OnPositionChanged += pos => Dispatcher.Invoke(() =>
             {
@@ -138,7 +113,6 @@ namespace AI_Video_ToolKit.UI
                 _currentFrame = TimeToFrame(_current);
                 Timeline.SetCurrentTime(_current);
                 Timeline.SetFrameInfo(_currentFrame, _totalFrames);
-
                 if (_isPlaying && _current >= _playbackRangeEnd)
                 {
                     _player.Pause();
@@ -151,14 +125,9 @@ namespace AI_Video_ToolKit.UI
             Timeline.OnChanged += Timeline_Changed;
 
             Log("MainWindow initialized. Ready for multiple file loading.");
-
             AllowDrop = true;
             Drop += Window_Drop;
         }
-
-        #endregion
-
-        #region ========== ЛОГГИРОВАНИЕ ==========
 
         private void Log(string text)
         {
@@ -184,18 +153,15 @@ namespace AI_Video_ToolKit.UI
         {
             _segments.Clear();
             SegmentList.Items.Clear();
-
             if (_duration <= 0) return;
 
             var startBound = _inputMarker ?? TimeSpan.Zero;
             var endBound = _outputMarker ?? TimeSpan.FromSeconds(_duration);
-
             if (endBound <= startBound) return;
 
             var points = new List<TimeSpan> { startBound };
             points.AddRange(_cutMarkers.Where(c => c > startBound && c < endBound).OrderBy(x => x));
             points.Add(endBound);
-
             points = points.Distinct().OrderBy(x => x).ToList();
 
             int idx = 1;
@@ -208,20 +174,14 @@ namespace AI_Video_ToolKit.UI
                 _segments.Add(seg);
                 SegmentList.Items.Add(seg.ToString());
             }
-
             if (_selectedSegment != null)
-            {
                 _selectedSegment = _segments.FirstOrDefault(s => s.Index == _selectedSegment.Index);
-            }
-
             Log($"Segments rebuilt: {_segments.Count}");
         }
 
         private (TimeSpan start, TimeSpan end) ResolvePlaybackRange()
         {
-            if (_selectedSegment != null)
-                return (_selectedSegment.Start, _selectedSegment.End);
-
+            if (_selectedSegment != null) return (_selectedSegment.Start, _selectedSegment.End);
             var start = _inputMarker ?? TimeSpan.Zero;
             var end = _outputMarker ?? TimeSpan.FromSeconds(_duration);
             if (end <= start) end = TimeSpan.FromSeconds(_duration);
@@ -232,7 +192,6 @@ namespace AI_Video_ToolKit.UI
         {
             if (Timeline.SelectedMarkerTime == null) return;
             var moved = ClampToDuration(FrameToTime(TimeToFrame(Timeline.SelectedMarkerTime.Value) + frames));
-
             if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Input)
                 _inputMarker = moved;
             if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Output)
@@ -249,14 +208,10 @@ namespace AI_Video_ToolKit.UI
         private void DeleteSelectedMarker()
         {
             if (Timeline.SelectedMarkerTime == null) return;
-
-            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Input)
-                _inputMarker = null;
-            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Output)
-                _outputMarker = null;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Input) _inputMarker = null;
+            if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Output) _outputMarker = null;
             if (Timeline.SelectedMarkerType == Controls.TimelineControl.MarkerSelection.Cut)
                 _cutMarkers.Remove(Timeline.SelectedMarkerTime.Value);
-
             RefreshMarkers();
         }
 
@@ -268,7 +223,6 @@ namespace AI_Video_ToolKit.UI
         {
             _player.Stop();
             _file = path;
-
             var info = await _ffprobe.GetInfo(path);
             _duration = info.duration;
             _width = info.width;
@@ -277,7 +231,6 @@ namespace AI_Video_ToolKit.UI
             _codec = info.codec;
             _videoBitrate = info.videoBitrate;
             _hasAudio = info.hasAudio;
-
             _totalFrames = (long)Math.Round(_duration * _fps);
             _current = TimeSpan.Zero;
             _currentFrame = 0;
@@ -292,7 +245,6 @@ namespace AI_Video_ToolKit.UI
             Timeline.SetCurrentTime(_current);
             Timeline.SetFrameInfo(_currentFrame, _totalFrames);
             RefreshMarkers();
-
             await ShowFrameByCurrentFrame();
 
             FileNameText.Text = Path.GetFileName(path);
@@ -300,7 +252,6 @@ namespace AI_Video_ToolKit.UI
             RefreshMontagePanel();
             SetIdleState();
             _isHandlingPlaybackEnd = false;
-
             Log($"Loaded file: {path}");
         }
 
@@ -309,23 +260,18 @@ namespace AI_Video_ToolKit.UI
             foreach (var path in paths)
             {
                 if (!File.Exists(path)) continue;
-
                 var ext = Path.GetExtension(path).ToLower();
-                var isValid = ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".avi" ||
-                              ext == ".webm" || ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
-                              ext == ".bmp" || ext == ".gif";
-
+                bool isValid = ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".avi" ||
+                               ext == ".webm" || ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
+                               ext == ".bmp" || ext == ".gif";
                 if (!isValid)
                 {
                     Log($"Skipping unsupported file: {Path.GetFileName(path)}");
                     continue;
                 }
-
-                var item = new PlaylistItem { FilePath = path };
-                _playlistItems.Add(item);
-                PlaylistListBox.Items.Add($"{item.TypeIcon} {item.FileName}");
+                _playlistItems.Add(new PlaylistItem { FilePath = path });
+                PlaylistListBox.Items.Add($"{_playlistItems.Last().TypeIcon} {Path.GetFileName(path)}");
             }
-
             PlaylistCount.Text = $"{_playlistItems.Count} items";
             Log($"Added {_playlistItems.Count} items to playlist");
 
@@ -341,11 +287,9 @@ namespace AI_Video_ToolKit.UI
             foreach (var path in paths)
             {
                 if (!File.Exists(path)) continue;
-
                 var ext = Path.GetExtension(path).ToLower();
-                var isValid = ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".avi" ||
-                              ext == ".webm" || ext == ".jpg" || ext == ".jpeg" || ext == ".png";
-
+                bool isValid = ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".avi" ||
+                               ext == ".webm" || ext == ".jpg" || ext == ".jpeg" || ext == ".png";
                 if (!isValid) continue;
 
                 var item = new MontageItem
@@ -353,7 +297,6 @@ namespace AI_Video_ToolKit.UI
                     FilePath = path,
                     TypeIcon = (ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".avi" || ext == ".webm") ? "🎬" : "🖼️"
                 };
-
                 if (item.TypeIcon == "🎬")
                 {
                     try
@@ -361,17 +304,11 @@ namespace AI_Video_ToolKit.UI
                         var info = await _ffprobe.GetInfo(path);
                         item.Duration = TimeSpan.FromSeconds(info.duration);
                     }
-                    catch (Exception ex)
-                    {
-                        Log($"Failed to get duration for {Path.GetFileName(path)}: {ex.Message}");
-                        item.Duration = TimeSpan.Zero;
-                    }
+                    catch (Exception ex) { Log($"Failed to get duration for {Path.GetFileName(path)}: {ex.Message}"); }
                 }
-
                 _montageItems.Add(item);
                 MontageList.Items.Add($"{item.TypeIcon} {item.FileName} {(item.Duration.TotalSeconds > 0 ? $"({item.DurationStr})" : "")}");
             }
-
             MontageCount.Text = $"{_montageItems.Count} clips";
             Log($"Added {_montageItems.Count} items to montage table");
         }
@@ -379,20 +316,17 @@ namespace AI_Video_ToolKit.UI
         private void LoadFolder(string folderPath)
         {
             if (!Directory.Exists(folderPath)) return;
-
             var files = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories)
-                .Where(f => 
-                    f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
-
+                .Where(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
             LoadFilesToPlaylist(files);
             Log($"Loaded folder: {folderPath} ({files.Count()} files)");
         }
@@ -404,15 +338,12 @@ namespace AI_Video_ToolKit.UI
         private void PlayFrom(TimeSpan time)
         {
             if (_file == null) return;
-
             var range = ResolvePlaybackRange();
             _playbackRangeStart = range.start;
             _playbackRangeEnd = range.end;
-
             var start = ClampToDuration(time);
             if (start < _playbackRangeStart || start >= _playbackRangeEnd)
                 start = _playbackRangeStart;
-
             _player.Stop();
             _current = start;
             _currentFrame = TimeToFrame(_current);
@@ -432,7 +363,6 @@ namespace AI_Video_ToolKit.UI
         {
             if (_isHandlingPlaybackEnd) return;
             _isHandlingPlaybackEnd = true;
-
             _player.Stop();
             _current = _playbackRangeEnd <= TimeSpan.FromSeconds(_duration) ? _playbackRangeEnd : TimeSpan.FromSeconds(_duration);
             _currentFrame = TimeToFrame(_current);
@@ -446,7 +376,6 @@ namespace AI_Video_ToolKit.UI
                 PlayFrom(_playbackRangeStart);
                 return;
             }
-
             _isPlaying = false;
             SetPauseState();
             _isHandlingPlaybackEnd = false;
@@ -472,10 +401,8 @@ namespace AI_Video_ToolKit.UI
         private async void PlayPlaylistItem(int index)
         {
             if (index < 0 || index >= _playlistItems.Count) return;
-
             _currentPlaylistIndex = index;
             var item = _playlistItems[index];
-
             if (item.IsVideo)
             {
                 await LoadFile(item.FilePath);
@@ -490,18 +417,12 @@ namespace AI_Video_ToolKit.UI
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.EndInit();
                     bitmap.Freeze();
-
                     Preview.SetImage(bitmap);
-                    
                     FileNameText.Text = item.FileName;
                     Log($"Displaying image: {item.FileName}");
                 }
-                catch (Exception ex)
-                {
-                    Log($"Failed to load image: {ex.Message}");
-                }
+                catch (Exception ex) { Log($"Failed to load image: {ex.Message}"); }
             }
-
             Log($"Playing from playlist: {item.FileName}");
         }
 
@@ -516,15 +437,11 @@ namespace AI_Video_ToolKit.UI
                 Filter = "Media files|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.jpg;*.jpeg;*.png;*.bmp;*.gif",
                 Multiselect = true
             };
-
             if (dlg.ShowDialog() == true)
             {
                 LoadFilesToPlaylist(dlg.FileNames);
-                
                 if (_file == null && _playlistItems.Count > 0)
-                {
                     await LoadFile(_playlistItems[0].FilePath);
-                }
             }
         }
 
@@ -543,7 +460,6 @@ namespace AI_Video_ToolKit.UI
                 return;
             }
             if (_file == null) return;
-
             if (_isPlaying)
             {
                 _player.Pause();
@@ -591,7 +507,6 @@ namespace AI_Video_ToolKit.UI
                 {
                     var idx = Array.IndexOf(_speeds, (double)val);
                     if (idx >= 0) _speedIndex = idx;
-                    UpdateSpeedUI();
                     if (_isPlaying) PlayFrom(_current);
                 }
             }
@@ -608,9 +523,8 @@ namespace AI_Video_ToolKit.UI
 
         private void SegmentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            _selectedSegment = SegmentList.SelectedIndex >= 0 && SegmentList.SelectedIndex < _segments.Count 
-                ? _segments[SegmentList.SelectedIndex] 
-                : null;
+            _selectedSegment = SegmentList.SelectedIndex >= 0 && SegmentList.SelectedIndex < _segments.Count
+                ? _segments[SegmentList.SelectedIndex] : null;
         }
 
         private async void PreviewSegment_Click(object sender, RoutedEventArgs e)
@@ -625,7 +539,6 @@ namespace AI_Video_ToolKit.UI
         }
 
         private void UndoMarker_Click(object sender, RoutedEventArgs e) => UndoMarker();
-
         private void ClearCuts_Click(object sender, RoutedEventArgs e)
         {
             if (_cutMarkers.Count == 0) return;
@@ -663,50 +576,39 @@ namespace AI_Video_ToolKit.UI
             var root = Directory.GetCurrentDirectory();
             var cutDir = Path.Combine(root, "Cut");
             Directory.CreateDirectory(cutDir);
-
             var srcName = Path.GetFileNameWithoutExtension(_file);
             var ext = Path.GetExtension(_file);
             var outFile = Path.Combine(cutDir, $"{seg.Index:000}_{srcName}_{seg.StartFrame}_{seg.EndFrame}{ext}");
-
             var startTime = seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var bitrateKbps = Math.Max(1500, (int)Math.Round((_videoBitrate > 0 ? _videoBitrate : 4_000_000) / 1000.0));
             var bufSizeKbps = bitrateKbps * 2;
             var processVideo = VideoCheck.IsChecked == true;
             var processAudio = AudioCheck.IsChecked == true;
-
             if (!processVideo && !processAudio)
             {
                 Log("Export skipped: both Video and Audio are disabled.");
                 return;
             }
-
             var args = processVideo
                 ? $"-y -ss {startTime} -to {endTime} -i \"{_file}\" -map 0:v:0? {(processAudio ? "-map 0:a?" : "")} -sn -dn -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -minrate {bitrateKbps}k -maxrate {bitrateKbps}k -bufsize {bufSizeKbps}k {(processAudio ? "-c:a copy" : "-an")} -movflags +faststart \"{outFile}\""
                 : $"-y -ss {startTime} -to {endTime} -i \"{_file}\" -map 0:a? -vn -c:a copy \"{outFile}\"";
-
             var ok = await RunFfmpeg(args);
-            if (!ok)
-            {
-                if (File.Exists(outFile)) File.Delete(outFile);
-                Log($"copy cut failed for segment {seg.Index}. Output removed.");
-            }
+            if (!ok && File.Exists(outFile)) File.Delete(outFile);
+            if (!ok) Log($"copy cut failed for segment {seg.Index}. Output removed.");
         }
 
         private async void MergeSelected_Click(object sender, RoutedEventArgs e)
         {
             var selected = MontageList.SelectedItems.Cast<string>().ToList();
             if (selected.Count < 2) { Log("Select at least 2 montage items."); return; }
-            
             var root = Directory.GetCurrentDirectory();
             var cutDir = Path.Combine(root, "Cut");
             var outDir = Path.Combine(root, "Output");
             Directory.CreateDirectory(outDir);
-            
             var listFile = Path.Combine(root, "Temp", "concat_list.txt");
             Directory.CreateDirectory(Path.Combine(root, "Temp"));
             File.WriteAllLines(listFile, selected.Select(s => $"file '{Path.Combine(cutDir, s).Replace("'", "''")}'"));
-            
             var outFile = Path.Combine(outDir, $"merged_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
             var ok = await RunFfmpeg($"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outFile}\"");
             Log(ok ? $"Merged to {outFile}" : "Merge failed");
@@ -716,78 +618,71 @@ namespace AI_Video_ToolKit.UI
 
         #region ========== DRAG & DROP ОБРАБОТЧИКИ ==========
 
-        private async void Window_Drop(object? sender, DragEventArgs e)
-        {
-            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            
-            var items = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (items.Length == 0) return;
-
-            var files = new List<string>();
-            foreach (var item in items)
-            {
-                if (Directory.Exists(item))
-                {
-                    LoadFolder(item);
-                }
-                else if (File.Exists(item))
-                {
-                    files.Add(item);
-                }
-            }
-
-            if (files.Count > 0)
-            {
-                LoadFilesToPlaylist(files);
-                
-                if (_file == null && _playlistItems.Count > 0)
-                {
-                    await LoadFile(_playlistItems[0].FilePath);
-                }
-            }
-        }
-
         private void Playlist_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (items.Length == 0) return;
+            if (items == null || items.Length == 0) return;
 
             var files = new List<string>();
             foreach (var item in items)
             {
                 if (Directory.Exists(item))
                 {
-                    LoadFolder(item);
+                    var dirFiles = Directory.GetFiles(item, "*.*", SearchOption.AllDirectories)
+                        .Where(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
+                    files.AddRange(dirFiles);
                 }
-                else if (File.Exists(item))
-                {
-                    files.Add(item);
-                }
+                else if (File.Exists(item)) files.Add(item);
             }
-
-            if (files.Count > 0)
-            {
-                LoadFilesToPlaylist(files);
-            }
+            files = files.Distinct().ToList();
+            if (files.Count > 0) LoadFilesToPlaylist(files);
+            e.Handled = true;
         }
 
         private void Playlist_DragOver(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-                e.Effects = DragDropEffects.Copy;
-            else
-                e.Effects = DragDropEffects.None;
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private async void Window_Drop(object? sender, DragEventArgs e)
+        {
+            if (e.Handled) return;
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            var items = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (items == null || items.Length == 0) return;
+
+            var files = new List<string>();
+            foreach (var item in items)
+            {
+                if (Directory.Exists(item)) LoadFolder(item);
+                else if (File.Exists(item)) files.Add(item);
+            }
+            files = files.Distinct().ToList();
+            if (files.Count > 0)
+            {
+                LoadFilesToPlaylist(files);
+                if (_file == null && _playlistItems.Count > 0)
+                    await LoadFile(_playlistItems[0].FilePath);
+            }
             e.Handled = true;
         }
 
         private void MontageTable_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (items.Length == 0) return;
+            if (items == null || items.Length == 0) return;
 
             var files = new List<string>();
             foreach (var item in items)
@@ -803,33 +698,24 @@ namespace AI_Video_ToolKit.UI
                                     f.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
                     files.AddRange(dirFiles);
                 }
-                else if (File.Exists(item))
-                {
-                    files.Add(item);
-                }
+                else if (File.Exists(item)) files.Add(item);
             }
-
-            if (files.Count > 0)
-            {
-                LoadFilesToMontage(files);
-            }
+            files = files.Distinct().ToList();
+            if (files.Count > 0) LoadFilesToMontage(files);
+            e.Handled = true;
         }
 
         private void MontageTable_DragOver(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-                e.Effects = DragDropEffects.Copy;
-            else
-                e.Effects = DragDropEffects.None;
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
         private void MontageList_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (items.Length == 0) return;
+            if (items == null || items.Length == 0) return;
 
             var files = new List<string>();
             foreach (var item in items)
@@ -845,65 +731,43 @@ namespace AI_Video_ToolKit.UI
                                     f.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
                     files.AddRange(dirFiles);
                 }
-                else if (File.Exists(item))
-                {
-                    files.Add(item);
-                }
+                else if (File.Exists(item)) files.Add(item);
             }
-
-            if (files.Count > 0)
-            {
-                LoadFilesToMontage(files);
-            }
+            files = files.Distinct().ToList();
+            if (files.Count > 0) LoadFilesToMontage(files);
+            e.Handled = true;
         }
 
         private void MontageList_DragOver(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-                e.Effects = DragDropEffects.Copy;
-            else
-                e.Effects = DragDropEffects.None;
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
         private void Player_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
-            
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (items.Length == 0) return;
+            if (items == null || items.Length == 0) return;
 
             var files = new List<string>();
             foreach (var item in items)
             {
-                if (Directory.Exists(item))
-                {
-                    LoadFolder(item);
-                }
-                else if (File.Exists(item))
-                {
-                    files.Add(item);
-                }
+                if (Directory.Exists(item)) LoadFolder(item);
+                else if (File.Exists(item)) files.Add(item);
             }
-
+            files = files.Distinct().ToList();
             if (files.Count > 0)
             {
-                // Первый файл в плеер
                 _ = LoadFile(files[0]);
-                // Остальные в плейлист
-                if (files.Count > 1)
-                {
-                    LoadFilesToPlaylist(files.Skip(1));
-                }
+                if (files.Count > 1) LoadFilesToPlaylist(files.Skip(1));
             }
+            e.Handled = true;
         }
 
         private void Player_DragOver(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-                e.Effects = DragDropEffects.Copy;
-            else
-                e.Effects = DragDropEffects.None;
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
@@ -922,17 +786,14 @@ namespace AI_Video_ToolKit.UI
 
         private void RemoveSelected_Click(object sender, RoutedEventArgs e)
         {
-            var selectedIndex = PlaylistListBox.SelectedIndex;
-            if (selectedIndex >= 0 && selectedIndex < _playlistItems.Count)
+            var idx = PlaylistListBox.SelectedIndex;
+            if (idx >= 0 && idx < _playlistItems.Count)
             {
-                _playlistItems.RemoveAt(selectedIndex);
-                PlaylistListBox.Items.RemoveAt(selectedIndex);
+                _playlistItems.RemoveAt(idx);
+                PlaylistListBox.Items.RemoveAt(idx);
                 PlaylistCount.Text = $"{_playlistItems.Count} items";
-
-                if (_currentPlaylistIndex >= selectedIndex)
-                    _currentPlaylistIndex--;
-
-                Log($"Removed item from playlist");
+                if (_currentPlaylistIndex >= idx) _currentPlaylistIndex--;
+                Log("Removed item from playlist");
             }
         }
 
@@ -965,24 +826,24 @@ namespace AI_Video_ToolKit.UI
 
         private void UpdateSpeedUI() { }
 
-        private void SetPlayState() 
-        { 
-            PlayIcon.Text = "⏸"; 
-            PlayIcon.Foreground = System.Windows.Media.Brushes.Yellow;
+        private void SetPlayState()
+        {
+            PlayIcon.Text = "⏸";
+            PlayIcon.Foreground = Brushes.Yellow;
             StatusText.Text = "▶ Playing";
         }
 
-        private void SetPauseState() 
-        { 
-            PlayIcon.Text = "▶"; 
-            PlayIcon.Foreground = System.Windows.Media.Brushes.LightGreen;
+        private void SetPauseState()
+        {
+            PlayIcon.Text = "▶";
+            PlayIcon.Foreground = Brushes.LightGreen;
             StatusText.Text = "⏸ Paused";
         }
 
-        private void SetIdleState() 
-        { 
-            PlayIcon.Text = "▶"; 
-            PlayIcon.Foreground = System.Windows.Media.Brushes.White; 
+        private void SetIdleState()
+        {
+            PlayIcon.Text = "▶";
+            PlayIcon.Foreground = Brushes.White;
             _isPlaying = false;
             StatusText.Text = "✅ Ready";
         }
@@ -1015,7 +876,6 @@ namespace AI_Video_ToolKit.UI
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
-
             using var p = Process.Start(psi);
             if (p == null) return false;
             await p.WaitForExitAsync();
@@ -1048,46 +908,11 @@ namespace AI_Video_ToolKit.UI
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Space) 
-            { 
-                TogglePlayPause_Click(null, null); 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.K) 
-            { 
-                if (_isPlaying) 
-                { 
-                    _player.Pause(); 
-                    _isPlaying = false; 
-                    SetPauseState(); 
-                } 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.S) 
-            { 
-                Stop_Click(null, null); 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) 
-            { 
-                LoadMultiple_Click(null, null); 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) 
-            { 
-                UndoMarker(); 
-                e.Handled = true; 
-                return; 
-            }
-
+            if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); } e.Handled = true; return; }
+            if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { UndoMarker(); e.Handled = true; return; }
             if (e.Key == Key.I)
             {
                 _undoStack.Push(new MarkerAction(MarkerActionType.InputSet, _inputMarker));
@@ -1097,7 +922,6 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-
             if (e.Key == Key.O)
             {
                 _undoStack.Push(new MarkerAction(MarkerActionType.OutputSet, _outputMarker));
@@ -1107,7 +931,6 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-
             if (e.Key == Key.C)
             {
                 var p = _current;
@@ -1120,53 +943,26 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-
-            if (e.Key == Key.Delete) 
-            { 
-                DeleteSelectedMarker(); 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.Right) 
-            { 
-                if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None) 
-                    MoveSelectedMarkerByFrames(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); 
-                else 
-                    Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.Left) 
-            { 
-                if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None) 
-                    MoveSelectedMarkerByFrames(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); 
-                else 
-                    Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); 
-                e.Handled = true; 
-                return; 
-            }
-
-            if (e.Key == Key.R) 
-            { 
-                LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); 
-                e.Handled = true; 
-            }
-
-            if (e.Key == Key.F5 && _playlistItems.Count > 0)
+            if (e.Key == Key.Delete) { DeleteSelectedMarker(); e.Handled = true; return; }
+            if (e.Key == Key.Right)
             {
-                Previous_Click(null, null);
+                if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None)
+                    MoveSelectedMarkerByFrames(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1);
+                else Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1);
                 e.Handled = true;
                 return;
             }
-
-            if (e.Key == Key.F6 && _playlistItems.Count > 0)
+            if (e.Key == Key.Left)
             {
-                Next_Click(null, null);
+                if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None)
+                    MoveSelectedMarkerByFrames(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1);
+                else Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1);
                 e.Handled = true;
                 return;
             }
+            if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
+            if (e.Key == Key.F5 && _playlistItems.Count > 0) { Previous_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.F6 && _playlistItems.Count > 0) { Next_Click(null, null); e.Handled = true; return; }
         }
 
         #endregion
