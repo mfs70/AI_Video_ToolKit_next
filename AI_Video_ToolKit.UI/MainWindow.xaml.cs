@@ -16,13 +16,13 @@ namespace AI_Video_ToolKit.UI
     /// <summary>
     /// Главное окно приложения AI Video Toolkit
     /// Поддерживает:
-    /// - Множественную загрузку видео и изображений
+    /// - Множественную загрузку видео и изображений (кнопка, Ctrl+L, Drag&Drop)
     /// - Плейлист (25% ширины слева)
     /// - Монтажный стол (внизу)
-    /// - Drag & Drop (файлы, папки)
-    /// - Горячие клавиши (Ctrl+L, пробел, I, O, C и др.)
-    /// - Нарезку видео маркерами
+    /// - Нарезку видео маркерами (I, O, C, Delete, Undo)
     /// - Экспорт отрезков
+    /// - Воспроизведение видео с аудио (через NAudio, DirectShow)
+    /// - Отображение полных параметров аудио (кодек, частота, каналы, битрейт)
     /// </summary>
     public partial class MainWindow : Window
     {
@@ -63,10 +63,12 @@ namespace AI_Video_ToolKit.UI
 
         #region ========== ПОЛЯ И СВОЙСТВА ==========
 
+        // Сервисы
         private readonly BufferedVideoPlayer _player = new();
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
 
+        // Переменные текущего видео
         private string? _file;
         private double _duration;
         private double _fps = 25;
@@ -75,7 +77,12 @@ namespace AI_Video_ToolKit.UI
         private string _codec = "";
         private long _videoBitrate;
         private bool _hasAudio;
+        private string _audioCodec = "";
+        private int _audioSampleRate;
+        private int _audioChannels;
+        private long _audioBitrate;
 
+        // Состояние воспроизведения
         private TimeSpan _current = TimeSpan.Zero;
         private long _currentFrame;
         private bool _isPlaying;
@@ -83,19 +90,23 @@ namespace AI_Video_ToolKit.UI
         private TimeSpan _playbackRangeStart = TimeSpan.Zero;
         private TimeSpan _playbackRangeEnd = TimeSpan.MaxValue;
 
+        // Скорость воспроизведения
         private readonly double[] _speeds = { 1, 2, 4, 8, 16 };
         private int _speedIndex;
         private double Speed => _speeds[_speedIndex];
 
+        // Маркеры и отрезки
         private TimeSpan? _inputMarker, _outputMarker;
         private readonly List<TimeSpan> _cutMarkers = new();
         private readonly Stack<MarkerAction> _undoStack = new();
         private readonly List<Segment> _segments = new();
         private Segment? _selectedSegment;
 
+        // Плейлист
         private readonly List<PlaylistItem> _playlistItems = new();
         private int _currentPlaylistIndex = -1;
 
+        // Монтажный стол
         private readonly List<MontageItem> _montageItems = new();
 
         #endregion
@@ -106,6 +117,10 @@ namespace AI_Video_ToolKit.UI
         {
             InitializeComponent();
 
+            // Подключаем лог для BufferedVideoPlayer
+            _player.LogCallback = Log;
+
+            // Подписка на события плеера
             _player.OnFrame += f => Dispatcher.Invoke(() => Preview.SetFrame(f));
             _player.OnPositionChanged += pos => Dispatcher.Invoke(() =>
             {
@@ -124,7 +139,7 @@ namespace AI_Video_ToolKit.UI
 
             Timeline.OnChanged += Timeline_Changed;
 
-            Log("MainWindow initialized. Ready for multiple file loading.");
+            Log("MainWindow initialized. Ready for multiple file loading with audio support.");
             AllowDrop = true;
             Drop += Window_Drop;
         }
@@ -175,7 +190,7 @@ namespace AI_Video_ToolKit.UI
                 SegmentList.Items.Add(seg.ToString());
             }
             if (_selectedSegment != null)
-                _selectedSegment = _segments.FirstOrDefault(s => s.Index == _selectedSegment.Index);
+                _selectedSegment = _segments.FirstOrDefault(s => s.Index == _selectedSegment?.Index);
             Log($"Segments rebuilt: {_segments.Count}");
         }
 
@@ -217,12 +232,13 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== ЗАГРУЗКА ФАЙЛОВ ==========
+        #region ========== ЗАГРУЗКА ФАЙЛОВ И ИНФОРМАЦИЯ ==========
 
         private async System.Threading.Tasks.Task LoadFile(string path)
         {
             _player.Stop();
             _file = path;
+
             var info = await _ffprobe.GetInfo(path);
             _duration = info.duration;
             _width = info.width;
@@ -231,6 +247,11 @@ namespace AI_Video_ToolKit.UI
             _codec = info.codec;
             _videoBitrate = info.videoBitrate;
             _hasAudio = info.hasAudio;
+            _audioCodec = info.audioCodec;
+            _audioSampleRate = info.audioSampleRate;
+            _audioChannels = info.audioChannels;
+            _audioBitrate = info.audioBitrate;
+
             _totalFrames = (long)Math.Round(_duration * _fps);
             _current = TimeSpan.Zero;
             _currentFrame = 0;
@@ -274,12 +295,6 @@ namespace AI_Video_ToolKit.UI
             }
             PlaylistCount.Text = $"{_playlistItems.Count} items";
             Log($"Added {_playlistItems.Count} items to playlist");
-
-            if (_playlistItems.Count > 0 && _file == null)
-            {
-                _currentPlaylistIndex = 0;
-                _ = LoadFile(_playlistItems[0].FilePath);
-            }
         }
 
         private async void LoadFilesToMontage(IEnumerable<string> paths)
@@ -331,9 +346,30 @@ namespace AI_Video_ToolKit.UI
             Log($"Loaded folder: {folderPath} ({files.Count()} files)");
         }
 
+        private void UpdateInfoUI()
+        {
+            ResolutionText.Text = $"Resolution: {_width}x{_height}";
+            FpsText.Text = $"FPS: {_fps:0.##}";
+            CodecText.Text = $"Codec: {_codec}";
+            BitrateText.Text = $"Bitrate: {Math.Round(_videoBitrate / 1000.0):0} kbps";
+            DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
+
+            if (_hasAudio)
+            {
+                string audioInfo = $"Audio: {_audioCodec} | {_audioSampleRate / 1000.0:F1} kHz | {_audioChannels} ch";
+                if (_audioBitrate > 0)
+                    audioInfo += $" | {Math.Round(_audioBitrate / 1000.0):0} kbps";
+                AudioInfoText.Text = audioInfo;
+            }
+            else
+            {
+                AudioInfoText.Text = "Audio: none";
+            }
+        }
+
         #endregion
 
-        #region ========== ВОСПРОИЗВЕДЕНИЕ ==========
+        #region ========== ВОСПРОИЗВЕДЕНИЕ И СКОРОСТЬ ==========
 
         private void PlayFrom(TimeSpan time)
         {
@@ -344,10 +380,12 @@ namespace AI_Video_ToolKit.UI
             var start = ClampToDuration(time);
             if (start < _playbackRangeStart || start >= _playbackRangeEnd)
                 start = _playbackRangeStart;
+
             _player.Stop();
             _current = start;
             _currentFrame = TimeToFrame(_current);
-            _player.Start(_file, 1280, 720, _fps, _current, Speed);
+            bool enableAudio = AudioCheck.IsChecked == true && _hasAudio;
+            _player.Start(_file, 1280, 720, _fps, _current, Speed, enableAudio);
             _isPlaying = true;
             SetPlayState();
         }
@@ -394,6 +432,26 @@ namespace AI_Video_ToolKit.UI
             SetPauseState();
         }
 
+        private void IncreaseSpeedHotkey()
+        {
+            if (_speedIndex < _speeds.Length - 1)
+            {
+                _speedIndex++;
+                SpeedCombo.SelectedIndex = _speedIndex;
+                if (_isPlaying) PlayFrom(_current);
+            }
+        }
+
+        private void DecreaseSpeedHotkey()
+        {
+            if (_speedIndex > 0)
+            {
+                _speedIndex--;
+                SpeedCombo.SelectedIndex = _speedIndex;
+                if (_isPlaying) PlayFrom(_current);
+            }
+        }
+
         #endregion
 
         #region ========== УПРАВЛЕНИЕ ПЛЕЙЛИСТОМ ==========
@@ -428,7 +486,7 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== ОБРАБОТЧИКИ СОБЫТИЙ UI ==========
+        #region ========== ОБРАБОТЧИКИ UI (КНОПКИ, СОБЫТИЯ) ==========
 
         private async void LoadMultiple_Click(object? sender, RoutedEventArgs? e)
         {
@@ -440,7 +498,7 @@ namespace AI_Video_ToolKit.UI
             if (dlg.ShowDialog() == true)
             {
                 LoadFilesToPlaylist(dlg.FileNames);
-                if (_file == null && _playlistItems.Count > 0)
+                if (_playlistItems.Count > 0 && _file == null)
                     await LoadFile(_playlistItems[0].FilePath);
             }
         }
@@ -672,7 +730,7 @@ namespace AI_Video_ToolKit.UI
             if (files.Count > 0)
             {
                 LoadFilesToPlaylist(files);
-                if (_file == null && _playlistItems.Count > 0)
+                if (_playlistItems.Count > 0 && _file == null)
                     await LoadFile(_playlistItems[0].FilePath);
             }
             e.Handled = true;
@@ -753,14 +811,28 @@ namespace AI_Video_ToolKit.UI
             var files = new List<string>();
             foreach (var item in items)
             {
-                if (Directory.Exists(item)) LoadFolder(item);
+                if (Directory.Exists(item))
+                {
+                    var dirFiles = Directory.GetFiles(item, "*.*", SearchOption.AllDirectories)
+                        .Where(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
+                    files.AddRange(dirFiles);
+                }
                 else if (File.Exists(item)) files.Add(item);
             }
             files = files.Distinct().ToList();
             if (files.Count > 0)
             {
+                LoadFilesToPlaylist(files);
                 _ = LoadFile(files[0]);
-                if (files.Count > 1) LoadFilesToPlaylist(files.Skip(1));
             }
             e.Handled = true;
         }
@@ -824,8 +896,6 @@ namespace AI_Video_ToolKit.UI
             RefreshMarkers();
         }
 
-        private void UpdateSpeedUI() { }
-
         private void SetPlayState()
         {
             PlayIcon.Text = "⏸";
@@ -846,16 +916,6 @@ namespace AI_Video_ToolKit.UI
             PlayIcon.Foreground = Brushes.White;
             _isPlaying = false;
             StatusText.Text = "✅ Ready";
-        }
-
-        private void UpdateInfoUI()
-        {
-            ResolutionText.Text = $"Resolution: {_width}x{_height}";
-            FpsText.Text = $"FPS: {_fps:0.##}";
-            CodecText.Text = $"Codec: {_codec}";
-            BitrateText.Text = $"Bitrate: {Math.Round(_videoBitrate / 1000.0):0} kbps";
-            DurationText.Text = $"Duration: {TimeSpan.FromSeconds(_duration):hh\\:mm\\:ss} / {_totalFrames} frames";
-            AudioInfoText.Text = _hasAudio ? "Audio: available" : "Audio: none";
         }
 
         private void RefreshMontagePanel()
@@ -912,6 +972,8 @@ namespace AI_Video_ToolKit.UI
             if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); } e.Handled = true; return; }
             if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(null, null); e.Handled = true; return; }
+            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeedHotkey(); e.Handled = true; return; }
+            if (e.Key == Key.J && Keyboard.Modifiers == ModifierKeys.None) { DecreaseSpeedHotkey(); e.Handled = true; return; }
             if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { UndoMarker(); e.Handled = true; return; }
             if (e.Key == Key.I)
             {
