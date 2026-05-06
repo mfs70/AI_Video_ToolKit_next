@@ -13,22 +13,10 @@ using AI_Video_ToolKit.UI.Services;
 
 namespace AI_Video_ToolKit.UI
 {
-    /// <summary>
-    /// Главное окно приложения AI Video Toolkit
-    /// Поддерживает:
-    /// - Множественную загрузку видео и изображений (кнопка, Ctrl+L, Drag&Drop)
-    /// - Плейлист (25% ширины слева)
-    /// - Монтажный стол (внизу)
-    /// - Нарезку видео маркерами (I, O, C, Delete, Undo)
-    /// - Экспорт отрезков
-    /// - Воспроизведение видео с аудио (через FFmpeg → стерео PCM)
-    /// - Отображение полных параметров аудио (кодек, частота, каналы, битрейт)
-    /// </summary>
     public partial class MainWindow : Window
     {
         #region ========== ВЛОЖЕННЫЕ ТИПЫ ==========
 
-        /// <summary>Модель отрезка видео для нарезки</summary>
         private sealed record Segment(int Index, TimeSpan Start, TimeSpan End, long StartFrame, long EndFrame)
         {
             public TimeSpan Duration => End - Start;
@@ -38,7 +26,6 @@ namespace AI_Video_ToolKit.UI
         private enum MarkerActionType { InputSet, OutputSet, CutAdd, CutClear }
         private readonly record struct MarkerAction(MarkerActionType Type, TimeSpan? Value, List<TimeSpan>? SnapshotCuts = null);
 
-        /// <summary>Элемент плейлиста (видео или изображение)</summary>
         public class PlaylistItem
         {
             public string FilePath { get; set; } = "";
@@ -49,7 +36,6 @@ namespace AI_Video_ToolKit.UI
             public string TypeIcon => IsVideo ? "🎬" : (IsImage ? "🖼️" : "📄");
         }
 
-        /// <summary>Элемент монтажного стола</summary>
         public class MontageItem
         {
             public string FilePath { get; set; } = "";
@@ -63,12 +49,10 @@ namespace AI_Video_ToolKit.UI
 
         #region ========== ПОЛЯ И СВОЙСТВА ==========
 
-        // Сервисы
         private readonly BufferedVideoPlayer _player = new();
         private readonly FFprobeService _ffprobe = new();
         private readonly FrameGrabber _grabber = new();
 
-        // Переменные текущего видео
         private string? _file;
         private double _duration;
         private double _fps = 25;
@@ -82,7 +66,6 @@ namespace AI_Video_ToolKit.UI
         private int _audioChannels;
         private long _audioBitrate;
 
-        // Состояние воспроизведения
         private TimeSpan _current = TimeSpan.Zero;
         private long _currentFrame;
         private bool _isPlaying;
@@ -90,23 +73,19 @@ namespace AI_Video_ToolKit.UI
         private TimeSpan _playbackRangeStart = TimeSpan.Zero;
         private TimeSpan _playbackRangeEnd = TimeSpan.MaxValue;
 
-        // Скорость воспроизведения
-        private readonly double[] _speeds = { 1, 2, 4, 8, 16 };
+        private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex;
         private double Speed => _speeds[_speedIndex];
 
-        // Маркеры и отрезки
         private TimeSpan? _inputMarker, _outputMarker;
         private readonly List<TimeSpan> _cutMarkers = new();
         private readonly Stack<MarkerAction> _undoStack = new();
         private readonly List<Segment> _segments = new();
         private Segment? _selectedSegment;
 
-        // Плейлист
         private readonly List<PlaylistItem> _playlistItems = new();
         private int _currentPlaylistIndex = -1;
 
-        // Монтажный стол
         private readonly List<MontageItem> _montageItems = new();
 
         #endregion
@@ -117,10 +96,7 @@ namespace AI_Video_ToolKit.UI
         {
             InitializeComponent();
 
-            // Лог для отладки аудио
             _player.LogCallback = Log;
-
-            // Подписка на события плеера
             _player.OnFrame += f => Dispatcher.Invoke(() => Preview.SetFrame(f));
             _player.OnPositionChanged += pos => Dispatcher.Invoke(() =>
             {
@@ -137,14 +113,22 @@ namespace AI_Video_ToolKit.UI
             });
             _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
 
-            // Подписка на таймлайн
             Timeline.OnChanged += Timeline_Changed;
 
-            // Подписка на изменение чекбокса "Аудио"
+            // Заполнение комбобокса скоростей
+            SpeedCombo.Items.Clear();
+            foreach (var s in _speeds)
+                SpeedCombo.Items.Add($"{s}x");
+            _speedIndex = Array.IndexOf(_speeds, 1.0);
+            if (_speedIndex < 0) _speedIndex = 3;
+            SpeedCombo.SelectedIndex = _speedIndex;
+
             AudioCheck.Checked += AudioCheck_CheckedChanged;
             AudioCheck.Unchecked += AudioCheck_CheckedChanged;
+            VideoCheck.Checked += VideoCheck_CheckedChanged;
+            VideoCheck.Unchecked += VideoCheck_CheckedChanged;
 
-            Log("MainWindow initialized. Ready for multiple file loading with multi‑channel audio support.");
+            Log("MainWindow initialized. Hotkeys: J/L - speed, K - stop, Space - play/pause, A - audio, V - video, M - merge all, R - loop, I/O/C - markers, Ctrl+Z - undo, Delete - delete marker, Arrows - step.");
             AllowDrop = true;
             Drop += Window_Drop;
         }
@@ -161,7 +145,7 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== РАБОТА С МАРКЕРАМИ И ОТРЕЗКАМИ ==========
+        #region ========== МАРКЕРЫ И ОТРЕЗКИ ==========
 
         private void RefreshMarkers()
         {
@@ -237,7 +221,7 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== ЗАГРУЗКА ФАЙЛОВ И ИНФОРМАЦИЯ ==========
+        #region ========== ЗАГРУЗКА ФАЙЛОВ ==========
 
         private async System.Threading.Tasks.Task LoadFile(string path)
         {
@@ -374,7 +358,7 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== ВОСПРОИЗВЕДЕНИЕ И СКОРОСТЬ ==========
+        #region ========== ВОСПРОИЗВЕДЕНИЕ ==========
 
         private void PlayFrom(TimeSpan time)
         {
@@ -444,6 +428,7 @@ namespace AI_Video_ToolKit.UI
                 _speedIndex++;
                 SpeedCombo.SelectedIndex = _speedIndex;
                 if (_isPlaying) PlayFrom(_current);
+                Log($"Speed increased to {_speeds[_speedIndex]}x");
             }
         }
 
@@ -454,6 +439,7 @@ namespace AI_Video_ToolKit.UI
                 _speedIndex--;
                 SpeedCombo.SelectedIndex = _speedIndex;
                 if (_isPlaying) PlayFrom(_current);
+                Log($"Speed decreased to {_speeds[_speedIndex]}x");
             }
         }
 
@@ -491,7 +477,7 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== ОБРАБОТЧИКИ UI (КНОПКИ, СОБЫТИЯ) ==========
+        #region ========== ОБРАБОТЧИКИ UI ==========
 
         private async void LoadMultiple_Click(object? sender, RoutedEventArgs? e)
         {
@@ -563,15 +549,10 @@ namespace AI_Video_ToolKit.UI
 
         private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (SpeedCombo.SelectedItem is ComboBoxItem item)
+            if (SpeedCombo.SelectedIndex >= 0 && SpeedCombo.SelectedIndex < _speeds.Length)
             {
-                var text = item.Content?.ToString()?.Replace("x", "");
-                if (int.TryParse(text, out var val))
-                {
-                    var idx = Array.IndexOf(_speeds, (double)val);
-                    if (idx >= 0) _speedIndex = idx;
-                    if (_isPlaying) PlayFrom(_current);
-                }
+                _speedIndex = SpeedCombo.SelectedIndex;
+                if (_isPlaying) PlayFrom(_current);
             }
         }
 
@@ -602,6 +583,7 @@ namespace AI_Video_ToolKit.UI
         }
 
         private void UndoMarker_Click(object sender, RoutedEventArgs e) => UndoMarker();
+
         private void ClearCuts_Click(object sender, RoutedEventArgs e)
         {
             if (_cutMarkers.Count == 0) return;
@@ -665,13 +647,25 @@ namespace AI_Video_ToolKit.UI
         {
             var selected = MontageList.SelectedItems.Cast<string>().ToList();
             if (selected.Count < 2) { Log("Select at least 2 montage items."); return; }
+            await MergeFiles(selected);
+        }
+
+        private async void MergeAll_Click(object sender, RoutedEventArgs e)
+        {
+            var allItems = MontageList.Items.Cast<string>().ToList();
+            if (allItems.Count < 2) { Log("Need at least 2 clips in montage table."); return; }
+            await MergeFiles(allItems);
+        }
+
+        private async System.Threading.Tasks.Task MergeFiles(List<string> fileNames)
+        {
             var root = Directory.GetCurrentDirectory();
             var cutDir = Path.Combine(root, "Cut");
             var outDir = Path.Combine(root, "Output");
             Directory.CreateDirectory(outDir);
             var listFile = Path.Combine(root, "Temp", "concat_list.txt");
             Directory.CreateDirectory(Path.Combine(root, "Temp"));
-            File.WriteAllLines(listFile, selected.Select(s => $"file '{Path.Combine(cutDir, s).Replace("'", "''")}'"));
+            File.WriteAllLines(listFile, fileNames.Select(s => $"file '{Path.Combine(cutDir, s).Replace("'", "''")}'"));
             var outFile = Path.Combine(outDir, $"merged_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
             var ok = await RunFfmpeg($"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outFile}\"");
             Log(ok ? $"Merged to {outFile}" : "Merge failed");
@@ -679,12 +673,11 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region ========== ОБРАБОТЧИК ИЗМЕНЕНИЯ ЧЕКБОКСА "АУДИО" ==========
+        #region ========== ОБРАБОТЧИКИ ЧЕКБОКСОВ ==========
 
         private void AudioCheck_CheckedChanged(object sender, RoutedEventArgs e)
         {
             if (_file == null) return;
-
             bool enable = AudioCheck.IsChecked == true;
             if (enable && !_hasAudio)
             {
@@ -692,8 +685,6 @@ namespace AI_Video_ToolKit.UI
                 AudioCheck.IsChecked = false;
                 return;
             }
-
-            // Перезапускаем плеер с текущей позиции с новым состоянием аудио
             if (_isPlaying)
                 PlayFrom(_current);
             else
@@ -702,6 +693,20 @@ namespace AI_Video_ToolKit.UI
                 _player.Start(_file, 1280, 720, _fps, _current, Speed, enable);
             }
             Log(enable ? "Audio enabled." : "Audio disabled.");
+        }
+
+        private void VideoCheck_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (_file == null) return;
+            bool enableAudio = AudioCheck.IsChecked == true && _hasAudio;
+            if (_isPlaying)
+                PlayFrom(_current);
+            else
+            {
+                _player.Stop();
+                _player.Start(_file, 1280, 720, _fps, _current, Speed, enableAudio);
+            }
+            Log(VideoCheck.IsChecked == true ? "Video enabled." : "Video disabled.");
         }
 
         #endregion
@@ -745,9 +750,8 @@ namespace AI_Video_ToolKit.UI
             e.Handled = true;
         }
 
-        private async void Window_Drop(object? sender, DragEventArgs e)
+        private void Player_Drop(object sender, DragEventArgs e)
         {
-            if (e.Handled) return;
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (items == null || items.Length == 0) return;
@@ -755,16 +759,35 @@ namespace AI_Video_ToolKit.UI
             var files = new List<string>();
             foreach (var item in items)
             {
-                if (Directory.Exists(item)) LoadFolder(item);
+                if (Directory.Exists(item))
+                {
+                    var dirFiles = Directory.GetFiles(item, "*.*", SearchOption.AllDirectories)
+                        .Where(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
+                    files.AddRange(dirFiles);
+                }
                 else if (File.Exists(item)) files.Add(item);
             }
             files = files.Distinct().ToList();
             if (files.Count > 0)
             {
                 LoadFilesToPlaylist(files);
-                if (_playlistItems.Count > 0 && _file == null)
-                    await LoadFile(_playlistItems[0].FilePath);
+                _ = LoadFile(files[0]);
             }
+            e.Handled = true;
+        }
+
+        private void Player_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
@@ -834,8 +857,9 @@ namespace AI_Video_ToolKit.UI
             e.Handled = true;
         }
 
-        private void Player_Drop(object sender, DragEventArgs e)
+        private async void Window_Drop(object sender, DragEventArgs e)
         {
+            if (e.Handled) return;
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (items == null || items.Length == 0) return;
@@ -843,35 +867,16 @@ namespace AI_Video_ToolKit.UI
             var files = new List<string>();
             foreach (var item in items)
             {
-                if (Directory.Exists(item))
-                {
-                    var dirFiles = Directory.GetFiles(item, "*.*", SearchOption.AllDirectories)
-                        .Where(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".mov", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase) ||
-                                    f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase));
-                    files.AddRange(dirFiles);
-                }
+                if (Directory.Exists(item)) LoadFolder(item);
                 else if (File.Exists(item)) files.Add(item);
             }
             files = files.Distinct().ToList();
             if (files.Count > 0)
             {
                 LoadFilesToPlaylist(files);
-                _ = LoadFile(files[0]);
+                if (_playlistItems.Count > 0 && _file == null)
+                    await LoadFile(_playlistItems[0].FilePath);
             }
-            e.Handled = true;
-        }
-
-        private void Player_DragOver(object sender, DragEventArgs e)
-        {
-            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
@@ -1000,21 +1005,28 @@ namespace AI_Video_ToolKit.UI
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // Пробел - Play/Pause
+            // Пробел – Play/Pause
             if (e.Key == Key.Space) { TogglePlayPause_Click(null, null); e.Handled = true; return; }
-            // K - Pause
-            if (e.Key == Key.K) { if (_isPlaying) { _player.Pause(); _isPlaying = false; SetPauseState(); } e.Handled = true; return; }
-            // S - Stop
+
+            // K – Stop
+            if (e.Key == Key.K) { Stop_Click(null, null); e.Handled = true; return; }
+
+            // S – также Stop
             if (e.Key == Key.S) { Stop_Click(null, null); e.Handled = true; return; }
-            // Ctrl+L - Load multiple files
+
+            // Ctrl+L – загрузка файлов
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(null, null); e.Handled = true; return; }
-            // L (без Ctrl) - Increase speed
+
+            // L – увеличение скорости
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeedHotkey(); e.Handled = true; return; }
-            // J - Decrease speed
+
+            // J – уменьшение скорости
             if (e.Key == Key.J && Keyboard.Modifiers == ModifierKeys.None) { DecreaseSpeedHotkey(); e.Handled = true; return; }
-            // Ctrl+Z - Undo
+
+            // Ctrl+Z – отмена маркера
             if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { UndoMarker(); e.Handled = true; return; }
-            // I - Set input marker
+
+            // I – входной маркер
             if (e.Key == Key.I)
             {
                 _undoStack.Push(new MarkerAction(MarkerActionType.InputSet, _inputMarker));
@@ -1024,7 +1036,8 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-            // O - Set output marker
+
+            // O – выходной маркер
             if (e.Key == Key.O)
             {
                 _undoStack.Push(new MarkerAction(MarkerActionType.OutputSet, _outputMarker));
@@ -1034,7 +1047,8 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-            // C - Add cut marker
+
+            // C – маркер обрезки
             if (e.Key == Key.C)
             {
                 var p = _current;
@@ -1047,9 +1061,11 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-            // Delete - Delete selected marker
+
+            // Delete – удалить выбранный маркер
             if (e.Key == Key.Delete) { DeleteSelectedMarker(); e.Handled = true; return; }
-            // Right/Left - Move marker or step
+
+            // Стрелки – перемещение маркера или покадровый шаг
             if (e.Key == Key.Right)
             {
                 if (Timeline.SelectedMarkerType != Controls.TimelineControl.MarkerSelection.None)
@@ -1066,11 +1082,21 @@ namespace AI_Video_ToolKit.UI
                 e.Handled = true;
                 return;
             }
-            // R - Toggle Loop
-            if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; }
-            // F5 - Previous in playlist
+
+            // R – повтор (Loop)
+            if (e.Key == Key.R) { LoopCheck.IsChecked = !(LoopCheck.IsChecked ?? false); e.Handled = true; return; }
+
+            // A – переключение аудио
+            if (e.Key == Key.A) { AudioCheck.IsChecked = !(AudioCheck.IsChecked ?? false); e.Handled = true; return; }
+
+            // V – переключение видео
+            if (e.Key == Key.V) { VideoCheck.IsChecked = !(VideoCheck.IsChecked ?? false); e.Handled = true; return; }
+
+            // M – склейка всех клипов
+            if (e.Key == Key.M) { MergeAll_Click(null, null); e.Handled = true; return; }
+
+            // F5 / F6 – навигация по плейлисту
             if (e.Key == Key.F5 && _playlistItems.Count > 0) { Previous_Click(null, null); e.Handled = true; return; }
-            // F6 - Next in playlist
             if (e.Key == Key.F6 && _playlistItems.Count > 0) { Next_Click(null, null); e.Handled = true; return; }
         }
 

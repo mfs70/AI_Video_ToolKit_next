@@ -12,11 +12,11 @@ namespace AI_Video_ToolKit.UI.Services
 {
     /// <summary>
     /// Буферизированный видеоплеер с поддержкой аудио через FFmpeg.
-    /// Исправлено зависание при завершении воспроизведения.
+    /// Преобразует любой аудиоформат (включая 6-канальный AC3) в стерео PCM 44.1 кГц.
     /// </summary>
     public sealed class BufferedVideoPlayer : IDisposable
     {
-        // Укажите правильный путь к ffmpeg.exe
+        // Путь к ffmpeg.exe – измените при необходимости
         private const string FFmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
 
         private Process? _videoProcess;
@@ -38,7 +38,7 @@ namespace AI_Video_ToolKit.UI.Services
         private bool _audioEnabled;
         private bool _videoEnded;
         private bool _audioEnded;
-        private bool _stopping; // флаг предотвращает повторную остановку
+        private bool _stopping;
 
         public event Action<BitmapSource>? OnFrame;
         public event Action<TimeSpan>? OnPositionChanged;
@@ -105,7 +105,8 @@ namespace AI_Video_ToolKit.UI.Services
                     FileName = FFmpegPath,
                     Arguments = $"-ss {start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
                                 $"-i \"{file}\" " +
-                                $"-vf scale={_width}:{_height}:force_original_aspect_ratio=decrease,pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2 " +
+                                $"-vf scale={_width}:{_height}:force_original_aspect_ratio=decrease," +
+                                $"pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2 " +
                                 "-f rawvideo -pix_fmt bgr24 -",
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
@@ -175,7 +176,7 @@ namespace AI_Video_ToolKit.UI.Services
                 _audioEnabled = true;
 
                 _ = Task.Run(() => AudioReadLoop(_cts!.Token));
-                LogCallback?.Invoke("Audio started (FFmpeg -> stereo 44.1kHz).");
+                LogCallback?.Invoke("Audio initialized (FFmpeg -> stereo PCM).");
             }
             catch (Exception ex)
             {
@@ -194,7 +195,7 @@ namespace AI_Video_ToolKit.UI.Services
             {
                 while (!token.IsCancellationRequested)
                 {
-                    // Контроль заполнения буфера
+                    // Контроль заполнения буфера (не более 80%)
                     if ((double)_waveProvider.BufferedBytes / _waveProvider.BufferLength > 0.8)
                     {
                         await Task.Delay(20, token);
@@ -206,6 +207,7 @@ namespace AI_Video_ToolKit.UI.Services
 
                     _waveProvider.AddSamples(buffer, 0, read);
 
+                    // Динамическая задержка для синхронизации с реальным временем
                     double seconds = read / (44100.0 * 4);
                     int delay = (int)(seconds * 900);
                     if (delay > 0) await Task.Delay(delay, token);
@@ -227,7 +229,7 @@ namespace AI_Video_ToolKit.UI.Services
         {
             if (_videoEnded && (!_audioEnabled || _audioEnded))
             {
-                Stop(); // Останавливаем всё, чтобы не зависнуть
+                Stop();
                 OnPlaybackEnded?.Invoke();
             }
         }
@@ -331,7 +333,6 @@ namespace AI_Video_ToolKit.UI.Services
 
             try { _cts?.Cancel(); } catch { }
 
-            // Отписываемся от событий, чтобы они не вызывали повторно Stop
             if (_videoProcess != null) _videoProcess.Exited -= (_, _) => { };
             if (_audioProcess != null) _audioProcess.Exited -= (_, _) => { };
 

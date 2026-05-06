@@ -15,20 +15,16 @@ namespace AI_Video_ToolKit.UI.Controls
         }
 
         /// <summary>
-        /// Установка кадра видео (BitmapSource).
-        /// Используется для динамического видео, получаемого из FFmpeg.
+        /// Установка кадра видео (BitmapSource)
         /// </summary>
-        /// <param name="image">Изображение кадра (может быть null для очистки)</param>
         public void SetFrame(BitmapSource? image)
         {
             PreviewImage.Source = image;
         }
 
         /// <summary>
-        /// Установка статического изображения (например, из файла на диске).
-        /// BitmapImage является подклассом BitmapSource, поэтому передаётся в тот же Image.Source.
+        /// Установка статического изображения (например, из файла на диске)
         /// </summary>
-        /// <param name="bitmap">Объект BitmapImage, представляющий картинку</param>
         public void SetImage(BitmapImage bitmap)
         {
             PreviewImage.Source = bitmap;

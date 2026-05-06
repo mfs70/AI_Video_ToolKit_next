@@ -11,15 +11,10 @@ namespace AI_Video_ToolKit.UI.Services
     /// </summary>
     public class FFprobeService
     {
-        // Путь к ffprobe.exe – при необходимости измените
         private const string FFprobePath = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
 
-        /// <summary>
-        /// Получить всю доступную информацию о файле
-        /// </summary>
         public async Task<MediaInfo> GetInfo(string filePath)
         {
-            // Запрашиваем видео- и аудио-параметры в удобном формате
             string args = $"-v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,codec_name,bit_rate -of default=noprint_wrappers=1 \"{filePath}\"";
             string videoOutput = await RunFFprobe(args);
 
@@ -31,7 +26,6 @@ namespace AI_Video_ToolKit.UI.Services
 
             var info = new MediaInfo();
 
-            // Парсим видео
             var dict = ParseOutput(videoOutput);
             info.width = GetInt(dict, "width");
             info.height = GetInt(dict, "height");
@@ -50,7 +44,6 @@ namespace AI_Video_ToolKit.UI.Services
             }
             else info.fps = 25.0;
 
-            // Парсим аудио
             var audioDict = ParseOutput(audioOutput);
             info.audioCodec = GetString(audioDict, "codec_name");
             info.audioSampleRate = GetInt(audioDict, "sample_rate");
@@ -58,7 +51,6 @@ namespace AI_Video_ToolKit.UI.Services
             info.audioBitrate = GetLong(audioDict, "bit_rate");
             info.hasAudio = !string.IsNullOrEmpty(info.audioCodec);
 
-            // Длительность
             var durDict = ParseOutput(durationOutput);
             string durStr = GetString(durDict, "duration");
             if (!string.IsNullOrEmpty(durStr) && double.TryParse(durStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double dur))
@@ -108,9 +100,6 @@ namespace AI_Video_ToolKit.UI.Services
             dict.ContainsKey(key) ? dict[key] : "";
     }
 
-    /// <summary>
-    /// Класс для хранения всей информации о медиафайле
-    /// </summary>
     public class MediaInfo
     {
         public double duration;
