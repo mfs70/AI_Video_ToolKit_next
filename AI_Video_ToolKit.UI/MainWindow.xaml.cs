@@ -238,9 +238,14 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region Загрузка файлов
+        #region Загрузка файлов (публичные методы для ViewModel)
 
-        private async Task LoadFile(string path)
+        public string CurrentFilePath => _file;
+        public int PlaylistItemCount => _playlistItems.Count;
+
+        public async Task LoadFile(string path) => await LoadFileInternal(path);
+
+        private async Task LoadFileInternal(string path)
         {
             _player.Stop();
             _file = path;
@@ -282,7 +287,7 @@ namespace AI_Video_ToolKit.UI
             Log($"Loaded file: {path}");
         }
 
-        private void LoadFilesToPlaylist(IEnumerable<string> paths)
+        public void LoadFilesToPlaylist(IEnumerable<string> paths)
         {
             foreach (var path in paths)
             {
@@ -462,7 +467,50 @@ namespace AI_Video_ToolKit.UI
 
         #endregion
 
-        #region Управление плейлистом
+        #region Управление плейлистом и публичные команды
+
+        public void TogglePlayPause()
+        {
+            if (string.IsNullOrEmpty(_file) && _playlistItems.Count > 0)
+            {
+                PlayPlaylistItem(0);
+                return;
+            }
+            if (string.IsNullOrEmpty(_file)) return;
+            if (_isPlaying)
+            {
+                _player.Pause();
+                _isPlaying = false;
+                SetPauseState();
+                return;
+            }
+            PlayFrom(_current);
+        }
+
+        public void StopPlayback()
+        {
+            Stop_Click(null, null);
+        }
+
+        public void PreviousPlaylistItem()
+        {
+            Previous_Click(null, null);
+        }
+
+        public void NextPlaylistItem()
+        {
+            Next_Click(null, null);
+        }
+
+        public void RestartPlaybackWithNewSpeed()
+        {
+            if (_isPlaying && !string.IsNullOrEmpty(_file))
+            {
+                _player.Stop();
+                bool enableAudio = AudioCheck.IsChecked == true && _hasAudio;
+                _player.Start(_file, 1280, 720, _fps, _current, Speed, enableAudio);
+            }
+        }
 
         private async void PlayPlaylistItem(int index)
         {
@@ -471,7 +519,7 @@ namespace AI_Video_ToolKit.UI
             var item = _playlistItems[index];
             if (item.IsVideo)
             {
-                await LoadFile(item.FilePath);
+                await LoadFileInternal(item.FilePath);
             }
             else if (item.IsImage)
             {
@@ -492,42 +540,8 @@ namespace AI_Video_ToolKit.UI
             Log($"Playing from playlist: {item.FileName}");
         }
 
-        #endregion
-
-        #region Обработчики UI-кнопок
-
-        private async void LoadMultiple_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new OpenFileDialog
-            {
-                Filter = "Media files|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.jpg;*.jpeg;*.png;*.bmp;*.gif",
-                Multiselect = true
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                LoadFilesToPlaylist(dlg.FileNames);
-                if (_playlistItems.Count > 0 && string.IsNullOrEmpty(_file))
-                    await LoadFile(_playlistItems[0].FilePath);
-            }
-        }
-
-        private void TogglePlayPause_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrEmpty(_file) && _playlistItems.Count > 0)
-            {
-                PlayPlaylistItem(0);
-                return;
-            }
-            if (string.IsNullOrEmpty(_file)) return;
-            if (_isPlaying)
-            {
-                _player.Pause();
-                _isPlaying = false;
-                SetPauseState();
-                return;
-            }
-            PlayFrom(_current);
-        }
+        private void LoadMultiple_Click(object sender, RoutedEventArgs e) { }
+        private void TogglePlayPause_Click(object sender, RoutedEventArgs e) { }
 
         private async void Stop_Click(object sender, RoutedEventArgs e)
         {
@@ -555,15 +569,6 @@ namespace AI_Video_ToolKit.UI
             _currentPlaylistIndex++;
             if (_currentPlaylistIndex >= _playlistItems.Count) _currentPlaylistIndex = 0;
             PlayPlaylistItem(_currentPlaylistIndex);
-        }
-
-        private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (SpeedCombo.SelectedIndex >= 0 && SpeedCombo.SelectedIndex < _speeds.Length)
-            {
-                _speedIndex = SpeedCombo.SelectedIndex;
-                if (_isPlaying) PlayFrom(_current);
-            }
         }
 
         private async void Timeline_Changed(TimeSpan t)
@@ -998,9 +1003,9 @@ namespace AI_Video_ToolKit.UI
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
-            if (e.Key == Key.K) { Stop_Click(sender, e); e.Handled = true; return; }
-            if (e.Key == Key.S) { Stop_Click(sender, e); e.Handled = true; return; }
+            if (e.Key == Key.Space) { TogglePlayPause(); e.Handled = true; return; }
+            if (e.Key == Key.K) { StopPlayback(); e.Handled = true; return; }
+            if (e.Key == Key.S) { StopPlayback(); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeedHotkey(); e.Handled = true; return; }
             if (e.Key == Key.J && Keyboard.Modifiers == ModifierKeys.None) { DecreaseSpeedHotkey(); e.Handled = true; return; }

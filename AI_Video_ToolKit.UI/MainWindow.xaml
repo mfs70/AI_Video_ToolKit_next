@@ -430,23 +430,24 @@
                     <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="PreviousBtn" Click="Previous_Click" Style="{StaticResource TransportButton}" Grid.Column="0" Margin="0,0,8,0" ToolTip="Previous (Ctrl+Left)">
+                <Button x:Name="PreviousBtn" Command="{Binding PreviousCommand}" Style="{StaticResource TransportButton}" Grid.Column="0" Margin="0,0,8,0" ToolTip="Previous (Ctrl+Left)">
                     <TextBlock Text="⏮" FontSize="16" />
                 </Button>
-                <Button x:Name="PlayPauseBtn" Click="TogglePlayPause_Click" Style="{StaticResource TransportButton}" Grid.Column="1" Margin="0,0,8,0" ToolTip="Play / Pause (Space)">
+                <Button x:Name="PlayPauseBtn" Command="{Binding PlayPauseCommand}" Style="{StaticResource TransportButton}" Grid.Column="1" Margin="0,0,8,0" ToolTip="Play / Pause (Space)">
                     <TextBlock x:Name="PlayIcon" Text="▶" FontSize="20" />
                 </Button>
-                <Button x:Name="NextBtn" Click="Next_Click" Style="{StaticResource TransportButton}" Grid.Column="2" Margin="0,0,8,0" ToolTip="Next (Ctrl+Right)">
+                <Button x:Name="NextBtn" Command="{Binding NextCommand}" Style="{StaticResource TransportButton}" Grid.Column="2" Margin="0,0,8,0" ToolTip="Next (Ctrl+Right)">
                     <TextBlock Text="⏭" FontSize="16" />
                 </Button>
-                <Button x:Name="StopBtn" Click="Stop_Click" Style="{StaticResource TransportButton}" Grid.Column="3" Margin="0,0,8,0" ToolTip="Stop (Ctrl+S)">
+                <Button x:Name="StopBtn" Command="{Binding StopCommand}" Style="{StaticResource TransportButton}" Grid.Column="3" Margin="0,0,8,0" ToolTip="Stop (Ctrl+S)">
                     <TextBlock Text="■" FontSize="18" />
                 </Button>
-                <Button x:Name="LoadButton" Click="LoadMultiple_Click" Style="{StaticResource LoadButtonStyle}" Grid.Column="4" Margin="0,0,15,0" ToolTip="Open files (Ctrl+L / Ctrl+O)">
+                <Button x:Name="LoadButton" Command="{Binding LoadFilesCommand}" Style="{StaticResource LoadButtonStyle}" Grid.Column="4" Margin="0,0,15,0" ToolTip="Open files (Ctrl+L / Ctrl+O)">
                     <TextBlock Text="📂" FontSize="18" />
                 </Button>
                 <TextBlock Grid.Column="5" Text="⚡" Foreground="#FFD700" FontSize="16" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <ComboBox x:Name="SpeedCombo" Grid.Column="6" Style="{StaticResource CompactSpeedComboBox}" SelectionChanged="SpeedCombo_SelectionChanged" VerticalAlignment="Center" HorizontalAlignment="Left" ToolTip="Playback speed" />
+                <ComboBox x:Name="SpeedCombo" Grid.Column="6" Style="{StaticResource CompactSpeedComboBox}" 
+                          SelectedIndex="{Binding SelectedSpeedIndex, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Left" ToolTip="Playback speed" />
                 <StackPanel Orientation="Horizontal" Grid.Column="8" VerticalAlignment="Center" Margin="20,0">
                     <TextBlock x:Name="CurrentTimeText" Text="00:00:00" Foreground="{StaticResource TextSpecialBrush}" FontFamily="{StaticResource MonospaceFont}" FontSize="14" FontWeight="Bold" />
                     <TextBlock Text=" / " Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" Margin="5,0" />
@@ -610,7 +611,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <!-- Привязка к свойству StatusText из MainViewModel -->
                 <TextBlock Text="{Binding StatusText}" 
