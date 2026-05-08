@@ -1,0 +1,33 @@
+Продолжаем работу над проектом AI_Video_ToolKit_next (WPF, .NET 8, FFmpeg, NAudio).
+
+## Основные принятые решения:
+- Архитектура: многослойная (Domain, Infrastructure, Core, UI).
+- Внедрение зависимостей через Microsoft.Extensions.DependencyInjection.
+- MVVM с CommunityToolkit.Mvvm (ViewModel подключён, команды и свойства генерируются через [ObservableProperty] и [RelayCommand]).
+- Главный плеер: BufferedVideoPlayer (FFmpeg → rawvideo bgr24 + pcm_s16le стерео 44.1кГц через NAudio).
+- FrameGrabber для покадрового захвата.
+- FFmpegProcessService (асинхронный запуск ffmpeg/ffprobe).
+- FFprobeService (парсинг ffprobe, модель MediaInfo в Domain).
+- Кастомный ProgressBar с закруглёнными углами и текстовой меткой процента (ProgressBarWidthConverter).
+- Путь к FFmpeg: C:\_Portable_\ffmpeg\bin\ffmpeg.exe (задаётся в App.xaml.cs при регистрации FFmpegProcessService).
+- Ресурсы тем, CornerRadius и т.п. вынесены в Window.Resources.
+- Кнопки действий перенесены в отдельную панель между таймлайном и монтажным столом, разбиты на группы Playback/Export/Edit.
+- Таймлайн, плейлист, монтажный стол, маркеры (I/O/C), нарезка и экспорт сегментов, склейка клипов, drag&drop папок и файлов реализованы.
+
+## Текущее состояние (после рефакторинга):
+- Проект компилируется и запускается.
+- MainWindow получает зависимости через конструктор (BufferedVideoPlayer, FFprobeService, FrameGrabber, FFmpegProcessService, MainViewModel).
+- Часть команд привязана в XAML (Previous, PlayPause, Next, Stop, LoadFiles, SpeedCombo.SelectedIndex).
+- StatusText привязан к MainViewModel.StatusText.
+- Часть методов в MainWindow публичные для обратной совместимости с ViewModel (это временное решение, будут вынесены в сервисы).
+- Core-слой пока практически пуст (VideoEditService и TimelineService устарели, удалены).
+
+## План дальнейших шагов (из README):
+1. Выделить PlaybackService – вынести управление плеером из MainWindow.
+2. Перенести метаданные в ViewModel (FileName, Resolution, FPS и т.д.).
+3. Переработать плейлист/монтажный стол на ObservableCollection + ItemsSource.
+4. Очистить Core-слой, наполнить его интерфейсами и перенести туда часть логики.
+5. Вынести пути FFmpeg в appsettings.json.
+6. Дальше: визуальный таймлайн с дорожками, изображения на таймлайне, удаление кадров, сборка изображений в видео, очередь экспорта, AI-модули.
+
+Пожалуйста, восстанови контекст и продолжим поэтапную реализацию согласно плану. Сейчас нужно сосредоточиться на Этапе 1: стабилизация MVP (выделение PlaybackService, перенос метаданных в ViewModel, рефакторинг плейлиста/монтажного стола).
