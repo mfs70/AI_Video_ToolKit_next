@@ -1,3 +1,4 @@
+// Файл: D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\Services\BufferedVideoPlayer.cs
 using System;
 using System.Buffers;
 using System.Diagnostics;

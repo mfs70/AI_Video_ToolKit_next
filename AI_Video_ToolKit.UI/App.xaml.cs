@@ -24,6 +24,7 @@ namespace AI_Video_ToolKit.UI
             services.AddSingleton<FFprobeService>();
             services.AddTransient<BufferedVideoPlayer>();
             services.AddTransient<FrameGrabber>();
+            services.AddSingleton<PlaybackService>();
             services.AddSingleton<MainViewModel>();
             services.AddTransient<MainWindow>();
 

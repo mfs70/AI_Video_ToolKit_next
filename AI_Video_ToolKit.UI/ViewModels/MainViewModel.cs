@@ -1,8 +1,11 @@
-// Файл: AI_Video_ToolKit.UI/ViewModels/MainViewModel.cs
+// Файл: ViewModels/MainViewModel.cs
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -13,32 +16,41 @@ namespace AI_Video_ToolKit.UI.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        private readonly BufferedVideoPlayer _player;
         private readonly FFprobeService _ffprobe;
+        private readonly FFmpegProcessService _ffmpeg;
+        private readonly PlaybackService _playback;
         private readonly FrameGrabber _grabber;
 
-        [ObservableProperty]
-        private string _statusText = "✅ Ready";
+        // ==================== Состояние ====================
+        [ObservableProperty] private string _statusText = "✅ Ready";
+        [ObservableProperty] private bool _isPlaying;
 
-        [ObservableProperty]
-        private string _currentFile = "";
+        // ==================== Метаданные текущего файла ====================
+        [ObservableProperty] private string _currentFile = "";
+        [ObservableProperty] private string _currentFileName = "";
+        [ObservableProperty] private string _resolution = "";
+        [ObservableProperty] private string _fps = "";
+        [ObservableProperty] private string _codec = "";
+        [ObservableProperty] private string _bitrate = "";
+        [ObservableProperty] private string _duration = "";
+        [ObservableProperty] private string _audioInfo = "";
 
-        [ObservableProperty]
-        private string _currentFileName = "";
+        // ==================== Таймлайн и позиция ====================
+        [ObservableProperty] private TimeSpan _currentPosition;
+        [ObservableProperty] private long _currentFrame;
+        [ObservableProperty] private long _totalFrames;
 
-        [ObservableProperty]
-        private double _exportProgress;
+        // ==================== Плейлист и монтажный стол ====================
+        public ObservableCollection<PlaylistItem> PlaylistItems { get; } = new();
+        public ObservableCollection<MontageItem> MontageItems { get; } = new();
 
-        [ObservableProperty]
-        private bool _isPlaying;
+        [ObservableProperty] private PlaylistItem? _selectedPlaylistItem;
 
+        // ==================== Скорость ====================
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex = 3;
-
+        [ObservableProperty] private int _selectedSpeedIndex = 3;
         public double Speed => _speeds[_speedIndex];
-
-        [ObservableProperty]
-        private int _selectedSpeedIndex = 3;
 
         partial void OnSelectedSpeedIndexChanged(int value)
         {
@@ -46,17 +58,40 @@ namespace AI_Video_ToolKit.UI.ViewModels
             {
                 _speedIndex = value;
                 OnPropertyChanged(nameof(Speed));
-                if (Application.Current.MainWindow is MainWindow mw)
-                {
-                    mw.RestartPlaybackWithNewSpeed();
-                }
+                _playback.SetSpeed(Speed);
             }
         }
 
-        public ObservableCollection<string> LogEntries { get; } = new();
+        // ==================== Конструктор ====================
+        public MainViewModel(FFprobeService ffprobe,
+                             FFmpegProcessService ffmpeg,
+                             PlaybackService playback,
+                             FrameGrabber grabber)
+        {
+            _ffprobe = ffprobe;
+            _ffmpeg = ffmpeg;
+            _playback = playback;
+            _grabber = grabber;
 
+            _playback.OnFrameChanged += frame =>
+            {
+                // кадр передаётся напрямую в VideoPreviewControl через MainWindow
+            };
+            _playback.OnPositionChanged += pos =>
+            {
+                CurrentPosition = pos;
+                CurrentFrame = TimeToFrame(pos);
+            };
+            _playback.OnPlaybackEnded += () =>
+            {
+                IsPlaying = false;
+                StatusText = "⏸ Paused";
+            };
+        }
+
+        // ==================== Команды ====================
         [RelayCommand]
-        private Task LoadFiles()
+        private async Task LoadFiles()
         {
             var dlg = new OpenFileDialog
             {
@@ -65,71 +100,154 @@ namespace AI_Video_ToolKit.UI.ViewModels
             };
             if (dlg.ShowDialog() == true)
             {
-                Application.Current.Dispatcher.Invoke(() =>
+                await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    if (Application.Current.MainWindow is MainWindow mw)
-                    {
-                        mw.LoadFilesToPlaylist(dlg.FileNames);
-                        if (mw.PlaylistItemCount > 0 && string.IsNullOrEmpty(mw.CurrentFilePath))
-                        {
-                            _ = mw.LoadFile(dlg.FileNames[0]);
-                        }
-                    }
+                    foreach (var path in dlg.FileNames)
+                        AddToPlaylist(path);
                 });
-            }
-            return Task.CompletedTask;
-        }
-
-        [RelayCommand]
-        private void PlayPause()
-        {
-            if (Application.Current.MainWindow is MainWindow mw)
-            {
-                mw.TogglePlayPause();
+                if (PlaylistItems.Count > 0 && string.IsNullOrEmpty(CurrentFile))
+                    await LoadFile(PlaylistItems[0].FilePath);
             }
         }
 
         [RelayCommand]
-        private void Stop()
+        private async Task ClearPlaylist()
         {
-            if (Application.Current.MainWindow is MainWindow mw)
-            {
-                mw.StopPlayback();
-            }
+            PlaylistItems.Clear();
+            StatusText = "Playlist cleared";
+            await Task.CompletedTask;
         }
 
         [RelayCommand]
-        private void Previous()
+        private async Task RemoveSelectedFromPlaylist()
         {
-            if (Application.Current.MainWindow is MainWindow mw)
+            if (SelectedPlaylistItem != null)
             {
-                mw.PreviousPlaylistItem();
+                PlaylistItems.Remove(SelectedPlaylistItem);
+                SelectedPlaylistItem = null;
             }
+            await Task.CompletedTask;
         }
 
         [RelayCommand]
-        private void Next()
+        private async Task PlayPause()
         {
-            if (Application.Current.MainWindow is MainWindow mw)
+            if (string.IsNullOrEmpty(CurrentFile))
             {
-                mw.NextPlaylistItem();
+                if (PlaylistItems.Count > 0)
+                    await LoadAndPlay(PlaylistItems[0].FilePath);
+                return;
             }
-        }
 
-        public MainViewModel(BufferedVideoPlayer player, FFprobeService ffprobe, FrameGrabber grabber)
-        {
-            _player = player;
-            _ffprobe = ffprobe;
-            _grabber = grabber;
-        }
-
-        public void AddLog(string text)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
+            if (_playback.IsPlaying)
             {
-                LogEntries.Add($"[{DateTime.Now:HH:mm:ss}] {text}");
-                if (LogEntries.Count > 500) LogEntries.RemoveAt(0);
+                _playback.Pause();
+                IsPlaying = false;
+                StatusText = "⏸ Paused";
+            }
+            else
+            {
+                _playback.Resume();
+                IsPlaying = true;
+                StatusText = "▶ Playing";
+            }
+            await Task.CompletedTask;
+        }
+
+        [RelayCommand]
+        private async Task Stop()
+        {
+            _playback.Stop();
+            IsPlaying = false;
+            StatusText = "⏹ Stopped";
+            await Task.CompletedTask;
+        }
+
+        [RelayCommand]
+        private async Task Next()
+        {
+            if (PlaylistItems.Count == 0) return;
+            int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
+            if (idx < 0) idx = 0;
+            idx = (idx + 1) % PlaylistItems.Count;
+            await LoadAndPlay(PlaylistItems[idx].FilePath);
+        }
+
+        [RelayCommand]
+        private async Task Previous()
+        {
+            if (PlaylistItems.Count == 0) return;
+            int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
+            if (idx < 0) idx = 0;
+            idx = (idx - 1 + PlaylistItems.Count) % PlaylistItems.Count;
+            await LoadAndPlay(PlaylistItems[idx].FilePath);
+        }
+
+        // ==================== Открытые методы для Drag&Drop (вызывает MainWindow) ====================
+        public void AddToPlaylist(string path)
+        {
+            if (!File.Exists(path)) return;
+            var ext = Path.GetExtension(path).ToLower();
+            if (!IsSupported(ext)) return;
+
+            PlaylistItems.Add(new PlaylistItem
+            {
+                FilePath = path
             });
         }
+
+        public async Task LoadFile(string path)
+        {
+            _playback.Stop();
+            var info = await _ffprobe.GetInfoAsync(path);
+
+            CurrentFile = path;
+            CurrentFileName = Path.GetFileName(path);
+            Resolution = $"{info.Width}x{info.Height}";
+            Fps = $"{info.Fps:0.##}";
+            Codec = info.VideoCodec;
+            Bitrate = $"{info.VideoBitrate / 1000:0} kbps";
+            Duration = info.Duration > 0 ? TimeSpan.FromSeconds(info.Duration).ToString(@"hh\:mm\:ss") : "??:??:??";
+            TotalFrames = (long)(info.Duration * info.Fps);
+            AudioInfo = info.HasAudio
+                ? $"{info.AudioCodec} {info.AudioSampleRate / 1000.0:F1}kHz {info.AudioChannels}ch {info.AudioBitrate / 1000:0}kbps"
+                : "none";
+
+            _playback.Start(path, info.Fps, TimeSpan.Zero, Speed, AudioInfo != "none");
+            IsPlaying = true;
+            StatusText = "▶ Playing";
+        }
+
+        // ==================== Утилиты ====================
+        private async Task LoadAndPlay(string path)
+        {
+            await LoadFile(path);
+        }
+
+        private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * (double.TryParse(Fps, out var f) ? f : 25));
+
+        private static bool IsSupported(string ext) =>
+            ext is ".mp4" or ".mkv" or ".mov" or ".avi" or ".webm"
+                or ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
+    }
+
+    // ==================== Вспомогательные модели для плейлиста ====================
+    public class PlaylistItem
+    {
+        public string FilePath { get; set; } = "";
+        public string FileName => Path.GetFileName(FilePath);
+        public string Extension => Path.GetExtension(FilePath).ToLower();
+        public bool IsVideo => Extension is ".mp4" or ".mkv" or ".mov" or ".avi" or ".webm";
+        public bool IsImage => Extension is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
+        public string TypeIcon => IsVideo ? "🎬" : (IsImage ? "🖼️" : "📄");
+    }
+
+    public class MontageItem
+    {
+        public string FilePath { get; set; } = "";
+        public string FileName => Path.GetFileName(FilePath);
+        public string TypeIcon { get; set; } = "🎬";
+        public TimeSpan Duration { get; set; }
+        public string DurationStr => Duration.ToString(@"hh\:mm\:ss\.fff");
     }
 }

@@ -34,10 +34,8 @@
     </Window.InputBindings>
 
     <Window.Resources>
-        <!-- Конвертер для кастомного прогресс-бара -->
         <converters:ProgressBarWidthConverter x:Key="ProgressBarWidthConverter" />
 
-        <!-- Цвета и шрифты -->
         <SolidColorBrush x:Key="BackgroundDarkBrush" Color="#1E1E1E" />
         <SolidColorBrush x:Key="SurfaceBrush" Color="#121212" />
         <SolidColorBrush x:Key="SurfaceLightBrush" Color="#1A1A1A" />
@@ -57,7 +55,6 @@
         <sw:CornerRadius x:Key="CardCornerRadius">6</sw:CornerRadius>
         <sw:CornerRadius x:Key="CircleRadius">21</sw:CornerRadius>
 
-        <!-- Тултип -->
         <Style TargetType="ToolTip">
             <Setter Property="Background" Value="{StaticResource SurfaceMediumBrush}" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -67,7 +64,6 @@
             <Setter Property="FontSize" Value="11" />
         </Style>
 
-        <!-- PrimaryButton -->
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
             <Setter Property="Foreground" Value="White" />
@@ -93,7 +89,6 @@
             </Setter>
         </Style>
 
-        <!-- SecondaryButton -->
         <Style x:Key="SecondaryButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource SurfaceMediumBrush}" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -122,7 +117,6 @@
             </Setter>
         </Style>
 
-        <!-- TransportButton -->
         <Style x:Key="TransportButton" TargetType="Button">
             <Setter Property="Width" Value="42" />
             <Setter Property="Height" Value="42" />
@@ -147,7 +141,6 @@
             </Setter>
         </Style>
 
-        <!-- LoadButtonStyle -->
         <Style x:Key="LoadButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="42" />
             <Setter Property="Height" Value="42" />
@@ -173,7 +166,6 @@
             </Setter>
         </Style>
 
-        <!-- CompactSpeedComboBox (тёмный) -->
         <Style x:Key="CompactSpeedComboBox" TargetType="ComboBox">
             <Setter Property="Width" Value="65" />
             <Setter Property="Height" Value="30" />
@@ -249,7 +241,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- ListBox -->
         <Style TargetType="ListBox">
             <Setter Property="Background" Value="#0C0C0C" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
@@ -273,7 +264,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- GroupBox -->
         <Style TargetType="GroupBox">
             <Setter Property="BorderBrush" Value="#444444" />
             <Setter Property="BorderThickness" Value="1" />
@@ -284,7 +274,6 @@
             <Setter Property="Padding" Value="6" />
         </Style>
 
-        <!-- Кастомный ProgressBar с закруглёнными углами и процентом -->
         <Style x:Key="CustomProgressBar" TargetType="ProgressBar">
             <Setter Property="Background" Value="#2B2B2B" />
             <Setter Property="Foreground" Value="{StaticResource AccentHoverBrush}" />
@@ -320,9 +309,9 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" /> <!-- Панель действий -->
-            <RowDefinition Height="Auto" /> <!-- Монтажный стол -->
-            <RowDefinition Height="Auto" /> <!-- Статус -->
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- ROW 0: ОСНОВНАЯ ОБЛАСТЬ -->
@@ -350,29 +339,31 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📋 Playlist" Foreground="{StaticResource TextSpecialBrush}"
                                        FontSize="12" FontWeight="Bold" />
-                            <TextBlock Text=" (Drag &amp; Drop here)" Foreground="{StaticResource TextSecondaryBrush}"
-                                       FontSize="10" Margin="5,0,0,0" />
                             <Border Background="{StaticResource AccentBrush}" CornerRadius="10" Padding="4,1" Margin="10,0,0,0">
-                                <TextBlock x:Name="PlaylistCount" Text="0 items" Foreground="White" FontSize="9" />
+                                <TextBlock Text="{Binding PlaylistItems.Count, StringFormat={}{0} items}" Foreground="White" FontSize="9" />
                             </Border>
                         </StackPanel>
                     </Border>
                     <ListBox x:Name="PlaylistListBox" Grid.Row="1" Background="#0C0C0C" BorderThickness="0"
+                             ItemsSource="{Binding PlaylistItems}"
+                             SelectedItem="{Binding SelectedPlaylistItem}"
                              AllowDrop="True" Drop="Playlist_Drop" DragOver="Playlist_DragOver"
-                             SelectionChanged="Playlist_SelectionChanged"
                              VirtualizingStackPanel.IsVirtualizing="True"
-                             VirtualizingStackPanel.VirtualizationMode="Recycling" />
+                             VirtualizingStackPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding TypeIcon}" Margin="0,0,5,0" />
+                                    <TextBlock Text="{Binding FileName}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="6" HorizontalAlignment="Center">
-                        <Button x:Name="ClearPlaylistBtn" Click="ClearPlaylist_Click"
-                                Style="{StaticResource SecondaryButton}" Width="60" Height="25" Margin="0,0,6,0"
-                                ToolTip="Clear playlist">
-                            <TextBlock Text="Clear" FontSize="10" />
-                        </Button>
-                        <Button x:Name="RemoveSelectedBtn" Click="RemoveSelected_Click"
-                                Style="{StaticResource SecondaryButton}" Width="80" Height="25"
-                                ToolTip="Remove selected from playlist">
-                            <TextBlock Text="Remove Sel" FontSize="10" />
-                        </Button>
+                        <Button Command="{Binding ClearPlaylistCommand}" Content="Clear" Width="60" Height="25"
+                                Margin="0,0,6,0" Style="{StaticResource SecondaryButton}" />
+                        <Button Command="{Binding RemoveSelectedFromPlaylistCommand}" Content="Remove Sel" Width="80" Height="25"
+                                Style="{StaticResource SecondaryButton}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -389,18 +380,17 @@
             <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Center" VerticalAlignment="Stretch"
                           Background="{StaticResource BorderBrush}" />
 
-            <!-- ПРАВАЯ ПАНЕЛЬ (только Logger и Segments) -->
+            <!-- ПРАВАЯ ПАНЕЛЬ -->
             <StackPanel Grid.Column="4" Orientation="Vertical">
-                <GroupBox Header="📋 Logger (Console Output)" Height="200">
+                <GroupBox Header="📋 Logger" Height="200">
                     <ListBox x:Name="LogList" Background="#0C0C0C"
                              Foreground="{StaticResource LogTextBrush}" FontSize="10"
                              VirtualizingStackPanel.IsVirtualizing="True"
                              VirtualizingStackPanel.VirtualizationMode="Recycling" />
                 </GroupBox>
-                <GroupBox Header="✂️ Segments (Cut Points)" Height="200">
+                <GroupBox Header="✂️ Segments" Height="200">
                     <ListBox x:Name="SegmentList" Background="#0C0C0C"
                              Foreground="{StaticResource TextPrimaryBrush}"
-                             SelectionChanged="SegmentList_SelectionChanged"
                              VirtualizingStackPanel.IsVirtualizing="True"
                              VirtualizingStackPanel.VirtualizationMode="Recycling" />
                 </GroupBox>
@@ -410,13 +400,13 @@
         <!-- ROW 1: МЕТАДАННЫЕ -->
         <Grid Grid.Row="1" Background="#252526">
             <WrapPanel Margin="10,6" HorizontalAlignment="Left">
-                <TextBlock x:Name="FileNameText" Foreground="{StaticResource TextAccentBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,20,0" />
-                <TextBlock x:Name="ResolutionText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
-                <TextBlock x:Name="FpsText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
-                <TextBlock x:Name="CodecText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
-                <TextBlock x:Name="BitrateText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
-                <TextBlock x:Name="DurationText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
-                <TextBlock x:Name="AudioInfoText" Foreground="{StaticResource TextSpecialBrush}" FontSize="11" />
+                <TextBlock Text="{Binding CurrentFileName}" Foreground="{StaticResource TextAccentBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,20,0" />
+                <TextBlock Text="{Binding Resolution, StringFormat='Resolution: {0}'}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
+                <TextBlock Text="{Binding Fps, StringFormat='FPS: {0}'}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
+                <TextBlock Text="{Binding Codec, StringFormat='Codec: {0}'}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
+                <TextBlock Text="{Binding Bitrate, StringFormat='Bitrate: {0}'}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
+                <TextBlock Text="{Binding Duration, StringFormat='Duration: {0}'}" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,0,15,0" />
+                <TextBlock Text="{Binding AudioInfo, StringFormat='Audio: {0}'}" Foreground="{StaticResource TextSpecialBrush}" FontSize="11" />
             </WrapPanel>
         </Grid>
 
@@ -430,23 +420,23 @@
                     <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="PreviousBtn" Command="{Binding PreviousCommand}" Style="{StaticResource TransportButton}" Grid.Column="0" Margin="0,0,8,0" ToolTip="Previous (Ctrl+Left)">
+                <Button Command="{Binding PreviousCommand}" Style="{StaticResource TransportButton}" Grid.Column="0" Margin="0,0,8,0" ToolTip="Previous (Ctrl+Left)">
                     <TextBlock Text="⏮" FontSize="16" />
                 </Button>
-                <Button x:Name="PlayPauseBtn" Command="{Binding PlayPauseCommand}" Style="{StaticResource TransportButton}" Grid.Column="1" Margin="0,0,8,0" ToolTip="Play / Pause (Space)">
+                <Button Command="{Binding PlayPauseCommand}" Style="{StaticResource TransportButton}" Grid.Column="1" Margin="0,0,8,0" ToolTip="Play / Pause (Space)">
                     <TextBlock x:Name="PlayIcon" Text="▶" FontSize="20" />
                 </Button>
-                <Button x:Name="NextBtn" Command="{Binding NextCommand}" Style="{StaticResource TransportButton}" Grid.Column="2" Margin="0,0,8,0" ToolTip="Next (Ctrl+Right)">
+                <Button Command="{Binding NextCommand}" Style="{StaticResource TransportButton}" Grid.Column="2" Margin="0,0,8,0" ToolTip="Next (Ctrl+Right)">
                     <TextBlock Text="⏭" FontSize="16" />
                 </Button>
-                <Button x:Name="StopBtn" Command="{Binding StopCommand}" Style="{StaticResource TransportButton}" Grid.Column="3" Margin="0,0,8,0" ToolTip="Stop (Ctrl+S)">
+                <Button Command="{Binding StopCommand}" Style="{StaticResource TransportButton}" Grid.Column="3" Margin="0,0,8,0" ToolTip="Stop (Ctrl+S)">
                     <TextBlock Text="■" FontSize="18" />
                 </Button>
-                <Button x:Name="LoadButton" Command="{Binding LoadFilesCommand}" Style="{StaticResource LoadButtonStyle}" Grid.Column="4" Margin="0,0,15,0" ToolTip="Open files (Ctrl+L / Ctrl+O)">
+                <Button Command="{Binding LoadFilesCommand}" Style="{StaticResource LoadButtonStyle}" Grid.Column="4" Margin="0,0,15,0" ToolTip="Open files (Ctrl+L / Ctrl+O)">
                     <TextBlock Text="📂" FontSize="18" />
                 </Button>
                 <TextBlock Grid.Column="5" Text="⚡" Foreground="#FFD700" FontSize="16" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <ComboBox x:Name="SpeedCombo" Grid.Column="6" Style="{StaticResource CompactSpeedComboBox}" 
+                <ComboBox Grid.Column="6" Style="{StaticResource CompactSpeedComboBox}"
                           SelectedIndex="{Binding SelectedSpeedIndex, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Left" ToolTip="Playback speed" />
                 <StackPanel Orientation="Horizontal" Grid.Column="8" VerticalAlignment="Center" Margin="20,0">
                     <TextBlock x:Name="CurrentTimeText" Text="00:00:00" Foreground="{StaticResource TextSpecialBrush}" FontFamily="{StaticResource MonospaceFont}" FontSize="14" FontWeight="Bold" />
@@ -491,14 +481,9 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-
-                <!-- Группы кнопок -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
-
-                    <!-- Playback -->
                     <StackPanel Orientation="Vertical" Margin="10,0">
-                        <TextBlock Text="Playback" Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="10" Margin="0,0,0,4" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Playback" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" Margin="0,0,0,4" HorizontalAlignment="Center"/>
                         <Button x:Name="PreviewSegmentBtn" Click="PreviewSegment_Click"
                                 Style="{StaticResource PrimaryButton}" Width="90"
                                 ToolTip="Preview selected segment">
@@ -508,13 +493,9 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
-
                     <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="10,4"/>
-
-                    <!-- Export -->
                     <StackPanel Orientation="Vertical" Margin="10,0">
-                        <TextBlock Text="Export" Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="10" Margin="0,0,0,4" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Export" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" Margin="0,0,0,4" HorizontalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="ExportSelectedBtn" Click="ExportSelected_Click"
                                     Style="{StaticResource SecondaryButton}" Width="80" Margin="0,0,6,0"
@@ -534,13 +515,9 @@
                             </Button>
                         </StackPanel>
                     </StackPanel>
-
                     <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="10,4"/>
-
-                    <!-- Edit -->
                     <StackPanel Orientation="Vertical" Margin="10,0">
-                        <TextBlock Text="Edit" Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="10" Margin="0,0,0,4" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Edit" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" Margin="0,0,0,4" HorizontalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="MergeSelectedBtn" Click="MergeSelected_Click"
                                     Style="{StaticResource SecondaryButton}" Width="80" Margin="0,0,6,0"
@@ -569,8 +546,6 @@
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
-
-                <!-- Кастомный прогресс-бар -->
                 <ProgressBar x:Name="ExportProgress" Grid.Row="1"
                              Style="{StaticResource CustomProgressBar}"
                              Margin="0,8,0,0" Height="18"
@@ -590,31 +565,42 @@
                     <Border Grid.Row="0" Background="{StaticResource SurfaceLightBrush}" CornerRadius="6,6,0,0" Padding="8,6">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🎬 Montage Table" Foreground="{StaticResource TextSpecialBrush}" FontSize="11" FontWeight="Bold" />
-                            <TextBlock Text=" (Drag &amp; Drop videos/images here)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" Margin="5,0,0,0" />
                             <Border Background="{StaticResource AccentBrush}" CornerRadius="10" Padding="4,1" Margin="10,0,0,0">
-                                <TextBlock x:Name="MontageCount" Text="0 clips" Foreground="White" FontSize="9" />
+                                <TextBlock Text="{Binding MontageItems.Count, StringFormat={}{0} clips}" Foreground="White" FontSize="9" />
                             </Border>
                         </StackPanel>
                     </Border>
                     <ListBox x:Name="MontageList" Grid.Row="1" Background="{StaticResource SurfaceBrush}"
+                             ItemsSource="{Binding MontageItems}"
                              MinHeight="70" MaxHeight="100" BorderThickness="0"
                              AllowDrop="True" Drop="MontageList_Drop" DragOver="MontageList_DragOver"
                              VirtualizingStackPanel.IsVirtualizing="True"
-                             VirtualizingStackPanel.VirtualizationMode="Recycling" />
+                             VirtualizingStackPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding TypeIcon}" Margin="0,0,5,0" />
+                                    <TextBlock Text="{Binding FileName}" Margin="0,0,5,0" />
+                                    <TextBlock Text="(" Foreground="#888" />
+                                    <TextBlock Text="{Binding DurationStr}" Foreground="#888" />
+                                    <TextBlock Text=")" Foreground="#888" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- ROW 6: СТРОКА СОСТОЯНИЯ (привязана к ViewModel) -->
+        <!-- ROW 6: СТРОКА СОСТОЯНИЯ -->
         <Grid Grid.Row="6" Background="{StaticResource SurfaceLightBrush}">
             <Grid Margin="8,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <!-- Привязка к свойству StatusText из MainViewModel -->
-                <TextBlock Text="{Binding StatusText}" 
-                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" />
+                <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <TextBlock Text="⚡ " Foreground="#FFD700" FontSize="10" />
                     <TextBlock x:Name="FrameCountText" Text="0 frames" Foreground="{StaticResource TextPrimaryBrush}" FontSize="10" Margin="0,0,10,0" />
