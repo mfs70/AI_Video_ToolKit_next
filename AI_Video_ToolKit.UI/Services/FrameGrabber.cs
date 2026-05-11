@@ -1,9 +1,11 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using AI_Video_ToolKit.Infrastructure.Services;
 
 namespace AI_Video_ToolKit.UI.Services
 {
@@ -12,17 +14,22 @@ namespace AI_Video_ToolKit.UI.Services
     /// </summary>
     public class FrameGrabber
     {
-        private const string FFmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+        private readonly FFmpegProcessService _processService;
+
+        public FrameGrabber(FFmpegProcessService processService)
+        {
+            _processService = processService;
+        }
 
         public async Task<BitmapSource?> GetFrame(string filePath, TimeSpan position, int width, int height)
         {
-            string tempFile = Path.GetTempFileName() + ".bmp";
+            string tempFile = Path.Combine(Path.GetTempPath(), $"{Path.GetRandomFileName()}.bmp");
             try
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = FFmpegPath,
-                    Arguments = $"-ss {position.TotalSeconds} -i \"{filePath}\" -vframes 1 -vf scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2 -f image2 \"{tempFile}\"",
+                    FileName = _processService.FfmpegPath,
+                    Arguments = $"-ss {position.TotalSeconds.ToString(CultureInfo.InvariantCulture)} -i \"{filePath}\" -vframes 1 -vf scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2 -f image2 \"{tempFile}\"",
                     CreateNoWindow = true,
                     UseShellExecute = false
                 };

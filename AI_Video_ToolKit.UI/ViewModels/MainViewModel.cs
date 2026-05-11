@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -49,6 +50,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private double _fileFps = 25;
         private long _videoBitrate;
         private bool _hasAudio;
+        public double FileFps => _fileFps;
 
         // Маркеры и сегменты
         private TimeSpan _inputMarker;
@@ -58,6 +60,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public ObservableCollection<SegmentInfo> Segments { get; } = new();
         [ObservableProperty] private SegmentInfo? _selectedSegment;
         public event Action? MarkersChanged;
+        public event Action<BitmapImage>? ImageLoaded;
 
         // Плейлист и монтажный стол
         public ObservableCollection<PlaylistItem> PlaylistItems { get; } = new();
@@ -87,14 +90,15 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _playback.OnFrameChanged += _ => { };
             _playback.OnPositionChanged += pos =>
             {
-                CurrentPosition = pos;
-                CurrentFrame = TimeToFrame(pos);
-                OnPropertyChanged(nameof(CurrentTimeStr));
+                RunOnUiThread(() => UpdatePosition(pos));
             };
             _playback.OnPlaybackEnded += () =>
             {
-                IsPlaying = false;
-                StatusText = "⏸ Paused";
+                RunOnUiThread(() =>
+                {
+                    IsPlaying = false;
+                    StatusText = "⏸ Paused";
+                });
             };
         }
 
@@ -119,7 +123,21 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
 
         [RelayCommand] private async Task ClearPlaylist() { PlaylistItems.Clear(); Segments.Clear(); MarkersChanged?.Invoke(); await Task.CompletedTask; }
-        [RelayCommand] private async Task RemoveSelectedFromPlaylist() { if (SelectedPlaylistItem != null) PlaylistItems.Remove(SelectedPlaylistItem); await Task.CompletedTask; }
+        [RelayCommand]
+        private async Task RemoveSelectedFromPlaylist()
+        {
+            if (SelectedPlaylistItem == null) return;
+
+            var removedIndex = PlaylistItems.IndexOf(SelectedPlaylistItem);
+            PlaylistItems.Remove(SelectedPlaylistItem);
+
+            // Keep keyboard/Next navigation anchored after deletion by selecting the
+            // item that slid into the removed row, or the previous item at the end.
+            if (PlaylistItems.Count > 0)
+                SelectedPlaylistItem = PlaylistItems[Math.Min(removedIndex, PlaylistItems.Count - 1)];
+
+            await Task.CompletedTask;
+        }
 
         [RelayCommand]
         private async Task PlayPause()
@@ -221,17 +239,30 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
 
         // Публичные методы для окна
-        public void AddToPlaylist(string path)
+        public bool AddToPlaylist(string path)
         {
-            if (!File.Exists(path)) return;
+            if (!File.Exists(path)) return false;
             var ext = Path.GetExtension(path).ToLower();
-            if (!IsSupported(ext)) return;
+            if (!IsSupported(ext)) return false;
+
+            if (PlaylistItems.Any(item => string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
+                return false;
+
             PlaylistItems.Add(new PlaylistItem { FilePath = path });
+            return true;
         }
 
         public async Task LoadFile(string path)
         {
             _playback.Stop();
+            SelectedPlaylistItem = PlaylistItems.FirstOrDefault(item => item.FilePath == path);
+            if (IsImage(path))
+            {
+                _playback.ClearMedia();
+                LoadImageFile(path);
+                return;
+            }
+
             var info = await _ffprobe.GetInfoAsync(path);
             CurrentFile = path; CurrentFileName = Path.GetFileName(path);
             Resolution = $"{info.Width}x{info.Height}"; FpsStr = $"{info.Fps:0.##}";
@@ -240,9 +271,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
             TotalFrames = (long)(info.Duration * info.Fps);
             AudioInfo = info.HasAudio ? $"{info.AudioCodec} {info.AudioSampleRate / 1000.0:F1}kHz {info.AudioChannels}ch {info.AudioBitrate / 1000:0}kbps" : "none";
             _fileDurationSec = info.Duration; _fileFps = info.Fps; _videoBitrate = info.VideoBitrate; _hasAudio = info.HasAudio;
+            OnPropertyChanged(nameof(FileFps));
             _inputMarker = TimeSpan.Zero; _outputMarker = TimeSpan.Zero; _cutMarkers.Clear(); _undoStack.Clear(); SelectedSegment = null;
             RebuildSegments();
             MarkersChanged?.Invoke();
+            UpdatePosition(TimeSpan.Zero);
             _playback.Start(path, info.Fps, TimeSpan.Zero, Speed, info.HasAudio);
             IsPlaying = true; StatusText = "▶ Playing";
             OnPropertyChanged(nameof(TotalTimeStr));
@@ -251,6 +284,20 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public void UpdatePosition(TimeSpan pos) { CurrentPosition = pos; CurrentFrame = TimeToFrame(pos); OnPropertyChanged(nameof(CurrentTimeStr)); }
         public (double duration, TimeSpan? input, TimeSpan? output, IReadOnlyList<TimeSpan> cuts) GetTimelineData() =>
             (_fileDurationSec, _inputMarker != TimeSpan.Zero ? _inputMarker : null, _outputMarker != TimeSpan.Zero ? _outputMarker : null, _cutMarkers);
+
+        private static void RunOnUiThread(Action action)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                action();
+                return;
+            }
+
+            // Playback callbacks are produced by worker tasks, so marshal property changes
+            // before ObservableCollection or binding notifications reach WPF controls.
+            dispatcher.Invoke(action);
+        }
 
         private void RebuildSegments()
         {
@@ -273,6 +320,45 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * _fileFps);
         private static bool IsSupported(string ext) => ext is ".mp4" or ".mkv" or ".mov" or ".avi" or ".webm" or ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
+        private static bool IsImage(string path) => Path.GetExtension(path).ToLower() is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
+
+        private void LoadImageFile(string path)
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.UriSource = new Uri(path);
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            CurrentFile = path;
+            CurrentFileName = Path.GetFileName(path);
+            Resolution = $"{bitmap.PixelWidth}x{bitmap.PixelHeight}";
+            FpsStr = "-";
+            Codec = "image";
+            Bitrate = "-";
+            Duration = "00:00:00";
+            AudioInfo = "none";
+            CurrentPosition = TimeSpan.Zero;
+            CurrentFrame = 0;
+            TotalFrames = 1;
+            _fileDurationSec = 0;
+            _fileFps = 1;
+            OnPropertyChanged(nameof(FileFps));
+            _videoBitrate = 0;
+            _hasAudio = false;
+            _inputMarker = TimeSpan.Zero;
+            _outputMarker = TimeSpan.Zero;
+            _cutMarkers.Clear();
+            _undoStack.Clear();
+            Segments.Clear();
+            IsPlaying = false;
+            StatusText = "🖼 Image loaded";
+            OnPropertyChanged(nameof(CurrentTimeStr));
+            OnPropertyChanged(nameof(TotalTimeStr));
+            MarkersChanged?.Invoke();
+            ImageLoaded?.Invoke(bitmap);
+        }
     }
 
     // Вспомогательные классы

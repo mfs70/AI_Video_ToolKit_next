@@ -244,6 +244,7 @@
                                                                       BorderBrush="{TemplateBinding BorderBrush}"
                                                                       BorderThickness="{TemplateBinding BorderThickness}"
                                                                       Foreground="{TemplateBinding Foreground}"
+                                                                      Tag="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}}"
                                                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                                                       Padding="6,4">
                                                                 <ToggleButton.Template>
@@ -261,8 +262,7 @@
                                                                                                 <ContentPresenter Grid.Column="0"
                                                                                                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                                                                                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                                                                                  Content="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}}"
-                                                                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                                                                                                  Content="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
                                                                                                 <Path Grid.Column="1"
                                                                                                                 Data="M 0 0 L 4 4 L 8 0 Z"
                                                                                                       Fill="{TemplateBinding Foreground}"
@@ -470,6 +470,7 @@
                                                  AllowDrop="True"
                                                         Drop="Playlist_Drop"
                                                         DragOver="Playlist_DragOver"
+                                                        MouseDoubleClick="PlaylistListBox_MouseDoubleClick"
                                                  VirtualizingStackPanel.IsVirtualizing="True"
                                                  VirtualizingStackPanel.VirtualizationMode="Recycling">
                                                 <ListBox.ItemTemplate>

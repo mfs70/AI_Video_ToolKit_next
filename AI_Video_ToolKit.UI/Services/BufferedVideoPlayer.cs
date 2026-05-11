@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using AI_Video_ToolKit.Infrastructure.Services;
 using NAudio.Wave;
 
 namespace AI_Video_ToolKit.UI.Services
@@ -17,8 +18,7 @@ namespace AI_Video_ToolKit.UI.Services
     /// </summary>
     public sealed class BufferedVideoPlayer : IDisposable
     {
-        // Путь к ffmpeg.exe – измените при необходимости
-        private const string FFmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
+        private readonly FFmpegProcessService _processService;
 
         private Process? _videoProcess;
         private Process? _audioProcess;
@@ -33,18 +33,22 @@ namespace AI_Video_ToolKit.UI.Services
         private long _presentedFrames;
         private TimeSpan _startTime;
         private TimeSpan _lastPosition;
+        private Stopwatch? _playbackClock;
+        private TimeSpan _playbackClockOffset;
 
         private WaveOutEvent? _waveOut;
         private BufferedWaveProvider? _waveProvider;
-        private bool _audioEnabled;
-        private bool _videoEnded;
-        private bool _audioEnded;
         private bool _stopping;
 
         public event Action<BitmapSource>? OnFrame;
         public event Action<TimeSpan>? OnPositionChanged;
         public event Action? OnPlaybackEnded;
         public Action<string>? LogCallback;
+
+        public BufferedVideoPlayer(FFmpegProcessService processService)
+        {
+            _processService = processService;
+        }
 
         public void Start(string file, int width, int height, double fps, TimeSpan start, double speed = 1.0, bool enableAudio = true)
         {
@@ -60,11 +64,10 @@ namespace AI_Video_ToolKit.UI.Services
                 _speed = speed > 0 ? speed : 1.0;
                 _startTime = start;
                 _lastPosition = start;
+                _playbackClock = null;
+                _playbackClockOffset = TimeSpan.Zero;
                 _presentedFrames = 0;
                 _isPaused = false;
-                _videoEnded = false;
-                _audioEnded = false;
-                _audioEnabled = false;
                 _stopping = false;
 
                 _bufferedFrameCapacity = CalculateBufferCapacity(_width, _height);
@@ -103,7 +106,7 @@ namespace AI_Video_ToolKit.UI.Services
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = FFmpegPath,
+                    FileName = _processService.FfmpegPath,
                     Arguments = $"-ss {start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
                                 $"-i \"{file}\" " +
                                 $"-vf scale={_width}:{_height}:force_original_aspect_ratio=decrease," +
@@ -117,22 +120,15 @@ namespace AI_Video_ToolKit.UI.Services
                 if (_videoProcess != null)
                 {
                     _videoProcess.EnableRaisingEvents = true;
-                    _videoProcess.Exited += (_, _) =>
-                    {
-                        if (!_stopping) _videoEnded = true;
-                        CheckPlaybackEnd();
-                    };
                 }
                 else
                 {
                     LogCallback?.Invoke("Failed to start FFmpeg video.");
-                    _videoEnded = true;
                 }
             }
             catch (Exception ex)
             {
                 LogCallback?.Invoke($"Video FFmpeg error: {ex.Message}");
-                _videoEnded = true;
             }
         }
 
@@ -142,9 +138,10 @@ namespace AI_Video_ToolKit.UI.Services
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = FFmpegPath,
+                    FileName = _processService.FfmpegPath,
                     Arguments = $"-ss {start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
                                 $"-i \"{file}\" " +
+                                BuildAudioTempoArguments(_speed) +
                                 "-f s16le -acodec pcm_s16le -ar 44100 -ac 2 -",
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
@@ -154,16 +151,10 @@ namespace AI_Video_ToolKit.UI.Services
                 if (_audioProcess == null)
                 {
                     LogCallback?.Invoke("Failed to start FFmpeg audio.");
-                    _audioEnabled = false;
                     return;
                 }
 
                 _audioProcess.EnableRaisingEvents = true;
-                _audioProcess.Exited += (_, _) =>
-                {
-                    if (!_stopping) _audioEnded = true;
-                    CheckPlaybackEnd();
-                };
 
                 var waveFormat = new WaveFormat(44100, 16, 2);
                 _waveProvider = new BufferedWaveProvider(waveFormat)
@@ -173,8 +164,6 @@ namespace AI_Video_ToolKit.UI.Services
                 };
                 _waveOut = new WaveOutEvent();
                 _waveOut.Init(_waveProvider);
-                _waveOut.Play();
-                _audioEnabled = true;
 
                 _ = Task.Run(() => AudioReadLoop(_cts!.Token));
                 LogCallback?.Invoke("Audio initialized (FFmpeg -> stereo PCM).");
@@ -182,7 +171,6 @@ namespace AI_Video_ToolKit.UI.Services
             catch (Exception ex)
             {
                 LogCallback?.Invoke($"Audio init error: {ex.Message}");
-                _audioEnabled = false;
                 CleanupAudio();
             }
         }
@@ -221,18 +209,55 @@ namespace AI_Video_ToolKit.UI.Services
             }
             finally
             {
-                if (!_stopping) _audioEnded = true;
-                CheckPlaybackEnd();
             }
         }
 
-        private void CheckPlaybackEnd()
+        private static string BuildAudioTempoArguments(double speed)
         {
-            if (_videoEnded && (!_audioEnabled || _audioEnded))
+            if (Math.Abs(speed - 1.0) < 0.001) return string.Empty;
+
+            var filters = new List<string>();
+            var remaining = speed;
+            while (remaining > 2.0)
             {
-                Stop();
-                OnPlaybackEnded?.Invoke();
+                filters.Add("atempo=2.0");
+                remaining /= 2.0;
             }
+            while (remaining < 0.5)
+            {
+                filters.Add("atempo=0.5");
+                remaining /= 0.5;
+            }
+            filters.Add($"atempo={remaining.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}");
+
+            return $"-filter:a \"{string.Join(",", filters)}\" ";
+        }
+
+        private void FinishPlaybackNaturally()
+        {
+            if (_stopping) return;
+            _stopping = true;
+
+            CleanupAudio();
+
+            try
+            {
+                if (_videoProcess != null && !_videoProcess.HasExited)
+                    _videoProcess.Kill();
+            }
+            catch (Exception ex) { LogCallback?.Invoke($"Finish video error: {ex.Message}"); }
+            finally
+            {
+                _videoProcess?.Dispose();
+                _videoProcess = null;
+            }
+
+            _cts?.Dispose();
+            _cts = null;
+            _frameChannel = null;
+            _isPaused = false;
+            _stopping = false;
+            OnPlaybackEnded?.Invoke();
         }
 
         private async Task DecodeLoop(CancellationToken token)
@@ -252,8 +277,6 @@ namespace AI_Video_ToolKit.UI.Services
                         int r = await stream.ReadAsync(buffer, read, _frameSize - read, token);
                         if (r == 0)
                         {
-                            if (!_stopping) _videoEnded = true;
-                            CheckPlaybackEnd();
                             ArrayPool<byte>.Shared.Return(buffer);
                             writer.TryComplete();
                             return;
@@ -275,7 +298,7 @@ namespace AI_Video_ToolKit.UI.Services
         {
             if (_frameChannel == null) return;
             var reader = _frameChannel.Reader;
-            var frameDelayMs = (int)Math.Max(1, 1000.0 / Math.Max(0.0001, _fps * _speed));
+            var completedNaturally = false;
 
             try
             {
@@ -289,15 +312,27 @@ namespace AI_Video_ToolKit.UI.Services
                                 await Task.Delay(8, token);
                             if (token.IsCancellationRequested) return;
 
+                            if (_playbackClock == null)
+                            {
+                                _playbackClock = Stopwatch.StartNew();
+                                _waveOut?.Play();
+                            }
+
                             var bmp = BitmapSource.Create(_width, _height, 96, 96, PixelFormats.Bgr24, null, rentedBuffer, _stride);
                             bmp.Freeze();
                             OnFrame?.Invoke(bmp);
 
                             _presentedFrames++;
-                            _lastPosition = _startTime + TimeSpan.FromSeconds(_presentedFrames / _fps);
+                            var clockElapsed = _playbackClockOffset + _playbackClock.Elapsed;
+                            var mediaElapsed = TimeSpan.FromTicks((long)(clockElapsed.Ticks * _speed));
+                            _lastPosition = _startTime + mediaElapsed;
                             OnPositionChanged?.Invoke(_lastPosition);
 
-                            await Task.Delay(frameDelayMs, token);
+                            var nextFrameMediaTime = TimeSpan.FromSeconds(_presentedFrames / Math.Max(0.0001, _fps));
+                            var nextFrameClockTime = TimeSpan.FromTicks((long)(nextFrameMediaTime.Ticks / _speed));
+                            var delay = nextFrameClockTime - clockElapsed;
+                            if (delay > TimeSpan.Zero)
+                                await Task.Delay(delay, token);
                         }
                         finally
                         {
@@ -305,11 +340,17 @@ namespace AI_Video_ToolKit.UI.Services
                         }
                     }
                 }
+                completedNaturally = !token.IsCancellationRequested;
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 LogCallback?.Invoke($"Playback error: {ex.Message}");
+            }
+            finally
+            {
+                if (completedNaturally)
+                    FinishPlaybackNaturally();
             }
         }
 
@@ -317,6 +358,11 @@ namespace AI_Video_ToolKit.UI.Services
         {
             if (_isPaused) return;
             _isPaused = true;
+            if (_playbackClock != null)
+            {
+                _playbackClockOffset += _playbackClock.Elapsed;
+                _playbackClock.Stop();
+            }
             _waveOut?.Pause();
         }
 
@@ -324,6 +370,10 @@ namespace AI_Video_ToolKit.UI.Services
         {
             if (!_isPaused) return;
             _isPaused = false;
+            if (_playbackClock != null)
+            {
+                _playbackClock.Restart();
+            }
             _waveOut?.Play();
         }
 
@@ -355,8 +405,6 @@ namespace AI_Video_ToolKit.UI.Services
             _cts = null;
             _frameChannel = null;
             _isPaused = false;
-            _videoEnded = true;
-            _audioEnded = true;
             _stopping = false;
         }
 

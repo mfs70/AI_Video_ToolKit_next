@@ -1,5 +1,8 @@
 // Файл: AI_Video_ToolKit.Infrastructure/Services/FFmpegProcessService.cs
+using System;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace AI_Video_ToolKit.Infrastructure.Services
@@ -10,13 +13,13 @@ namespace AI_Video_ToolKit.Infrastructure.Services
     /// </summary>
     public class FFmpegProcessService
     {
-        private readonly string _ffmpegPath;
-        private readonly string _ffprobePath;
+        public string FfmpegPath { get; }
+        public string FfprobePath { get; }
 
         public FFmpegProcessService(string ffmpegPath, string ffprobePath)
         {
-            _ffmpegPath = ffmpegPath;
-            _ffprobePath = ffprobePath;
+            FfmpegPath = ResolveToolPath(ffmpegPath, "ffmpeg.exe");
+            FfprobePath = ResolveToolPath(ffprobePath, "ffprobe.exe");
         }
 
         /// <summary>
@@ -25,7 +28,7 @@ namespace AI_Video_ToolKit.Infrastructure.Services
         /// </summary>
         public async Task<bool> RunFfmpegAsync(string arguments)
         {
-            return await RunProcessAsync(_ffmpegPath, arguments);
+            return await RunProcessAsync(FfmpegPath, arguments);
         }
 
         /// <summary>
@@ -36,7 +39,7 @@ namespace AI_Video_ToolKit.Infrastructure.Services
         {
             var psi = new ProcessStartInfo
             {
-                FileName = _ffprobePath,
+                FileName = FfprobePath,
                 Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -45,11 +48,15 @@ namespace AI_Video_ToolKit.Infrastructure.Services
                 StandardOutputEncoding = System.Text.Encoding.UTF8
             };
 
-            using var process = Process.Start(psi);
-            if (process == null) return string.Empty;
+            using var process = TryStartProcess(psi);
+            if (process == null)
+                return string.Empty;
 
-            string output = await process.StandardOutput.ReadToEndAsync();
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
+            string output = await outputTask;
+            _ = await stderrTask;
 
             // stderr может содержать предупреждения, но не ошибки.
             // Мы не бросаем исключение, возвращаем stdout.
@@ -68,18 +75,48 @@ namespace AI_Video_ToolKit.Infrastructure.Services
                 CreateNoWindow = true
             };
 
-            using var process = Process.Start(psi);
-            if (process == null) return false;
+            using var process = TryStartProcess(psi);
+            if (process == null)
+                return false;
 
-            // Асинхронно читаем stderr, чтобы не блокировать процесс.
-            _ = Task.Run(async () =>
-            {
-                while (!process.StandardError.EndOfStream)
-                    await process.StandardError.ReadLineAsync();
-            });
+            // FFmpeg can write enough diagnostics to fill stderr/stdout buffers.
+            // Reading both streams in parallel prevents the child process from hanging.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
 
             await process.WaitForExitAsync();
+            _ = await stdoutTask;
+            _ = await stderrTask;
             return process.ExitCode == 0;
+        }
+
+        private static Process? TryStartProcess(ProcessStartInfo startInfo)
+        {
+            try
+            {
+                return Process.Start(startInfo);
+            }
+            catch (Win32Exception)
+            {
+                return null;
+            }
+            catch (FileNotFoundException)
+            {
+                return null;
+            }
+        }
+
+        private static string ResolveToolPath(string configuredPath, string executableName)
+        {
+            if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
+                return configuredPath;
+
+            var fromEnvironment = Environment.GetEnvironmentVariable(Path.GetFileNameWithoutExtension(executableName).ToUpperInvariant());
+            if (!string.IsNullOrWhiteSpace(fromEnvironment) && File.Exists(fromEnvironment))
+                return fromEnvironment;
+
+            // Let Windows resolve the executable from PATH when the portable path is absent.
+            return executableName;
         }
     }
 }

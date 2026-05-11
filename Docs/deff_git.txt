@@ -1,0 +1,63 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/AI_Video_ToolKit.UI/MainWindow.xaml.cs b/AI_Video_ToolKit.UI/MainWindow.xaml.cs
+index c679d35c7eead5c5d92794aa45fd00a7862e1f97..f2e8681f5649723758fee4dd3e9333f336fcbdc1 100644
+--- a/AI_Video_ToolKit.UI/MainWindow.xaml.cs
++++ b/AI_Video_ToolKit.UI/MainWindow.xaml.cs
+@@ -49,53 +49,51 @@ namespace AI_Video_ToolKit.UI
+         private TimeSpan? _inputMarker;
+         private TimeSpan? _outputMarker;
+         private readonly List<TimeSpan> _cutMarkers = new();
+         private readonly Stack<MarkerAction> _undoStack = new();
+         private readonly List<Segment> _segments = new();
+         private Segment? _selectedSegment;
+ 
+         private TimeSpan _playbackRangeStart = TimeSpan.Zero;
+         private TimeSpan _playbackRangeEnd = TimeSpan.MaxValue;
+ 
+         public MainWindow()
+         {
+             InitializeComponent();
+             UpdateSpeedUI();
+ 
+             _player.OnFrame += f => Dispatcher.Invoke(() => Preview.SetFrame(f));
+             _player.OnPositionChanged += pos => Dispatcher.Invoke(() =>
+             {
+                 _current = ClampToDuration(pos);
+                 _currentFrame = TimeToFrame(_current);
+                 Timeline.SetCurrentTime(_current);
+                 Timeline.SetFrameInfo(_currentFrame, _totalFrames);
+ 
+                 if (_isPlaying && _current >= _playbackRangeEnd)
+                 {
+-                    _player.Pause();
+-                    _isPlaying = false;
+-                    SetPauseState();
++                    HandlePlaybackEnd();
+                 }
+             });
+             _player.OnPlaybackEnded += () => Dispatcher.Invoke(HandlePlaybackEnd);
+ 
+             Timeline.OnChanged += Timeline_Changed;
+             Log("MainWindow initialized.");
+         }
+ 
+         private void Log(string text)
+         {
+             LogList.Items.Add($"[{DateTime.Now:HH:mm:ss}] {text}");
+             if (LogList.Items.Count > 500) LogList.Items.RemoveAt(0);
+             LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
+         }
+ 
+         private void RefreshMarkers()
+         {
+             Timeline.SetMarkers(_inputMarker, _outputMarker, _cutMarkers);
+             RebuildSegments();
+         }
+ 
+         private void RebuildSegments()
+         {
+             _segments.Clear();
+             SegmentList.Items.Clear();
+ 
+EOF
+)

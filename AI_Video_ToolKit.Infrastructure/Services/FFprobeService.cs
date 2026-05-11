@@ -59,7 +59,7 @@ namespace AI_Video_ToolKit.Infrastructure.Services
             var dict = new Dictionary<string, string>();
             foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var parts = line.Split('=');
+                var parts = line.Split('=', 2);
                 if (parts.Length == 2)
                     dict[parts[0].Trim()] = parts[1].Trim();
             }
