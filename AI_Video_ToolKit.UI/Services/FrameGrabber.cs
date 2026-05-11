@@ -1,80 +1,56 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace AI_Video_ToolKit.UI.Services
 {
+    /// <summary>
+    /// Сервис для захвата отдельного кадра из видео с помощью FFmpeg
+    /// </summary>
     public class FrameGrabber
     {
         private const string FFmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
 
-        public Task<BitmapSource?> GetFrame(string file, TimeSpan time, int width, int height)
+        public async Task<BitmapSource?> GetFrame(string filePath, TimeSpan position, int width, int height)
         {
-            var ts = time.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var args =
-                $"-ss {ts} -i \"{file}\" " +
-                "-frames:v 1 " +
-                $"-vf scale={width}:{height}:force_original_aspect_ratio=decrease," +
-                $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2 " +
-                "-f rawvideo -pix_fmt bgr24 -";
-
-            return GrabRawFrame(args, width, height);
-        }
-
-        public Task<BitmapSource?> GetFrameByNumber(string file, long frameNumber, int width, int height)
-        {
-            if (frameNumber < 0) frameNumber = 0;
-
-            var args =
-                $"-i \"{file}\" " +
-                $"-vf \"select='eq(n\\,{frameNumber})',scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2\" " +
-                "-frames:v 1 -vsync 0 -f rawvideo -pix_fmt bgr24 -";
-
-            return GrabRawFrame(args, width, height);
-        }
-
-        private static async Task<BitmapSource?> GrabRawFrame(string arguments, int width, int height)
-        {
+            string tempFile = Path.GetTempFileName() + ".bmp";
             try
             {
                 var psi = new ProcessStartInfo
                 {
                     FileName = FFmpegPath,
-                    Arguments = arguments,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
+                    Arguments = $"-ss {position.TotalSeconds} -i \"{filePath}\" -vframes 1 -vf scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2 -f image2 \"{tempFile}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
                 };
+                using var process = Process.Start(psi);
+                if (process != null)
+                    await process.WaitForExitAsync();
 
-                var process = Process.Start(psi);
-                if (process == null)
-                    return null;
-
-                int frameSize = width * height * 3;
-                byte[] buffer = new byte[frameSize];
-                var stream = process.StandardOutput.BaseStream;
-
-                int read = 0;
-                while (read < frameSize)
+                if (File.Exists(tempFile))
                 {
-                    int r = await stream.ReadAsync(buffer, read, frameSize - read);
-                    if (r == 0) break;
-                    read += r;
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(tempFile);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+                    return bitmap;
                 }
-
-                if (read != frameSize)
-                    return null;
-
-                var bmp = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr24, null, buffer, width * 3);
-                bmp.Freeze();
-                return bmp;
             }
-            catch
+            catch (Exception ex)
             {
-                return null;
+                Debug.WriteLine($"FrameGrabber error: {ex.Message}");
             }
+            finally
+            {
+                if (File.Exists(tempFile))
+                    File.Delete(tempFile);
+            }
+            return null;
         }
     }
 }

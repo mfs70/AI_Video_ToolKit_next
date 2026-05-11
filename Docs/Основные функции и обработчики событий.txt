@@ -1,0 +1,41 @@
+
+---
+
+## ⚙️ Основные функции и обработчики событий
+
+### MainWindow.xaml.cs
+
+| Метод | Событие | Назначение |
+|-------|---------|------------|
+| `Load_Click` | Нажатие кнопки Load | Открытие диалога выбора видео файла |
+| `TogglePlayPause_Click` | Нажатие Play/Pause | Запуск или пауза воспроизведения |
+| `Stop_Click` | Нажатие Stop | Остановка воспроизведения |
+| `PreviewSegment_Click` | Нажатие Preview Segment | Предпросмотр выбранного отрезка |
+| `ExportSelected_Click` | Нажатие Export Sel | Экспорт выбранных отрезков |
+| `Cut_Click` | Нажатие Export All | Экспорт всех отрезков |
+| `MergeSelected_Click` | Нажатие Merge Selected | Объединение выбранных отрезков |
+| `UndoMarker_Click` | Нажатие Undo Marker | Отмена последнего добавленного маркера |
+| `ClearCuts_Click` | Нажатие Clear Cuts | Удаление всех маркеров отрезков |
+| `SegmentList_SelectionChanged` | Выбор в списке SegmentList | Обновление предпросмотра отрезка |
+| `SpeedCombo_SelectionChanged` | Выбор скорости | Изменение скорости воспроизведения |
+| `Window_PreviewKeyDown` | Нажатие клавиши | Обработка горячих клавиш (Ctrl+Z и др.) |
+| `Window_Drop` | Перетаскивание файла | Загрузка видео через Drag & Drop |
+
+
+
+MainWindow.xaml.cs
+├── FFmpegService.cs
+│ └── требует FFmpeg.exe
+├── VideoPlayerService.cs
+│ └── использует FFmpegService
+├── SegmentManager.cs
+├── ExportService.cs
+│ └── использует FFmpegService
+├── FileDialogService.cs
+└── LoggerService.cs
+
+VideoPreviewControl.xaml.cs
+└── VideoPlayerService.cs
+
+TimelineControl.xaml.cs
+└── SegmentManager.cs
