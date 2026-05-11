@@ -14,12 +14,9 @@ namespace AI_Video_ToolKit.UI
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-
             var services = new ServiceCollection();
-
             string ffmpegPath = @"C:\_Portable_\ffmpeg\bin\ffmpeg.exe";
             string ffprobePath = @"C:\_Portable_\ffmpeg\bin\ffprobe.exe";
-
             services.AddSingleton(new FFmpegProcessService(ffmpegPath, ffprobePath));
             services.AddSingleton<FFprobeService>();
             services.AddTransient<BufferedVideoPlayer>();
@@ -27,9 +24,7 @@ namespace AI_Video_ToolKit.UI
             services.AddSingleton<PlaybackService>();
             services.AddSingleton<MainViewModel>();
             services.AddTransient<MainWindow>();
-
             ServiceProvider = services.BuildServiceProvider();
-
             var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
             mainWindow.Show();
         }

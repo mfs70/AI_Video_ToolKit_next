@@ -1,7 +1,7 @@
-// Файл: Services/PlaybackService.cs (проект AI_Video_ToolKit.UI)
+// Файл: Services/PlaybackService.cs
 using System;
 using System.Threading.Tasks;
-using System.Windows.Media.Imaging;   // BitmapSource
+using System.Windows.Media.Imaging;
 
 namespace AI_Video_ToolKit.UI.Services
 {
@@ -10,7 +10,7 @@ namespace AI_Video_ToolKit.UI.Services
         private readonly BufferedVideoPlayer _player;
         private readonly FrameGrabber _grabber;
 
-        public event Action<BitmapSource>? OnFrameChanged;  // теперь BitmapSource
+        public event Action<BitmapSource>? OnFrameChanged;
         public event Action<TimeSpan>? OnPositionChanged;
         public event Action? OnPlaybackEnded;
 
@@ -28,50 +28,23 @@ namespace AI_Video_ToolKit.UI.Services
         {
             _player = player;
             _grabber = grabber;
-
             _player.OnFrame += frame => OnFrameChanged?.Invoke(frame);
-            _player.OnPositionChanged += pos =>
-            {
-                _current = pos;
-                OnPositionChanged?.Invoke(pos);
-            };
-            _player.OnPlaybackEnded += () =>
-            {
-                _isPlaying = false;
-                OnPlaybackEnded?.Invoke();
-            };
+            _player.OnPositionChanged += pos => { _current = pos; OnPositionChanged?.Invoke(pos); };
+            _player.OnPlaybackEnded += () => { _isPlaying = false; OnPlaybackEnded?.Invoke(); };
         }
 
-        public void Start(string file, double fps, TimeSpan startPosition,
-                          double speed = 1.0, bool enableAudio = true)
+        public void Start(string file, double fps, TimeSpan startPosition, double speed = 1.0, bool enableAudio = true)
         {
             Stop();
-            _currentFile = file;
-            _fps = fps;
-            _speed = speed;
-            _audioEnabled = enableAudio;
+            _currentFile = file; _fps = fps; _speed = speed; _audioEnabled = enableAudio;
             _current = startPosition;
             _player.Start(file, 1280, 720, fps, startPosition, speed, enableAudio);
             _isPlaying = true;
         }
 
-        public void Pause()
-        {
-            _player.Pause();
-            _isPlaying = false;
-        }
-
-        public void Resume()
-        {
-            _player.Resume();
-            _isPlaying = true;
-        }
-
-        public void Stop()
-        {
-            _player.Stop();
-            _isPlaying = false;
-        }
+        public void Pause() { _player.Pause(); _isPlaying = false; }
+        public void Resume() { _player.Resume(); _isPlaying = true; }
+        public void Stop() { _player.Stop(); _isPlaying = false; }
 
         public void SetSpeed(double speed)
         {
