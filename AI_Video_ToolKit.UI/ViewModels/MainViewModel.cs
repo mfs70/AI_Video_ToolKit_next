@@ -214,7 +214,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         {
             if (SelectedSegment == null) return;
             _playback.Stop();
-            _playback.Start(CurrentFile, _fileFps, SelectedSegment.Start, Speed, _hasAudio);
+			_playback.Start(CurrentFile, _fileFps, SelectedSegment.Start, Speed, _hasAudio, SelectedSegment.End);
+//заменил   _playback.Start(CurrentFile, _fileFps, SelectedSegment.Start, Speed, _hasAudio);
             IsPlaying = true; StatusText = "▶ Preview Segment";
             await Task.CompletedTask;
         }
@@ -233,8 +234,10 @@ namespace AI_Video_ToolKit.UI.ViewModels
             var startTime = seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var bitrateKbps = Math.Max(1500, (int)((_videoBitrate > 0 ? _videoBitrate : 4_000_000) / 1000));
-            var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a copy -movflags +faststart \"{outFile}\"";
-            var ok = await _ffmpeg.RunFfmpegAsync(args);
+            var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 -movflags +faststart \"{outFile}\"";
+			// var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a copy -movflags +faststart \"{outFile}\"";
+            
+			var ok = await _ffmpeg.RunFfmpegAsync(args);
             if (!ok && File.Exists(outFile)) File.Delete(outFile);
         }
 

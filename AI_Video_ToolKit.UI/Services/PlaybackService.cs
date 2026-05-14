@@ -27,13 +27,30 @@ namespace AI_Video_ToolKit.UI.Services
         private bool _hasActiveSession;
         private bool _endedNaturally;
 
+		private TimeSpan? _playbackEnd; //добавил
+
         public PlaybackService(BufferedVideoPlayer player, FrameGrabber grabber)
         {
             _player = player;
             _grabber = grabber;
             _player.LogCallback = message => OnLog?.Invoke(message);
             _player.OnFrame += frame => OnFrameChanged?.Invoke(frame);
-            _player.OnPositionChanged += pos => { _current = pos; OnPositionChanged?.Invoke(pos); };
+            _player.OnPositionChanged += pos => 
+			{
+				_current = pos;
+
+				if (_playbackEnd.HasValue && pos >= _playbackEnd.Value)
+				{
+					Stop();
+					OnPlaybackEnded?.Invoke();
+					return;
+				}
+
+				OnPositionChanged?.Invoke(pos);
+			};
+
+// убрал	{ _current = pos; OnPositionChanged?.Invoke(pos); };
+
             _player.OnPlaybackEnded += () =>
             {
                 _isPlaying = false;
@@ -43,7 +60,7 @@ namespace AI_Video_ToolKit.UI.Services
             };
         }
 
-        public void Start(string file, double fps, TimeSpan startPosition, double speed = 1.0, bool enableAudio = true)
+        public void Start(string file, double fps, TimeSpan startPosition, double speed = 1.0, bool enableAudio = true, TimeSpan? endPosition = null)
         {
             Stop();
             _currentFile = file; _fps = fps; _speed = speed; _audioEnabled = enableAudio;
@@ -52,6 +69,7 @@ namespace AI_Video_ToolKit.UI.Services
             _player.Start(file, 1280, 720, fps, startPosition, speed, enableAudio);
             _isPlaying = true;
             _hasActiveSession = true;
+			_playbackEnd = endPosition; // добавил
         }
 
         public void Pause() { _player.Pause(); _isPlaying = false; }
