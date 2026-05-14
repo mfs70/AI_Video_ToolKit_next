@@ -111,9 +111,86 @@ ExportService.cs
 структура проекта (tree или список файлов)
 
 
+CODEX-READY PROMPT — HOTKEY SYSTEM
+Refactor the entire keyboard input system into a centralized HotkeyService.
+
+Requirements:
+
+1. Remove all direct KeyDown logic from controls.
+2. Use RoutedCommands or InputBindings at MainWindow level.
+3. Commands must survive:
+
+   * timeline mouse drag
+   * playlist focus
+   * segment selection
+   * playback state changes
+4. Implement actions:
+
+   * Space → PlayPause
+   * K → Stop
+   * Left/Right → frame step
+   * Shift+Left/Right → 10-frame step
+   * I/O/C → markers
+   * Ctrl+Z → undo marker
+   * A/V/R → toggles
+   * W → preview segment
+   * M → merge montage
+5. Avoid duplicate event subscriptions.
+6. Avoid memory leaks.
+7. No UI-thread blocking.
+8. MVVM-only implementation.
 
 
+CODEX-READY PROMPT — TIMELINE REFACTOR
+Refactor TimelineControl into a production-grade frame-accurate timeline.
 
+Requirements:
+
+1. Remove all event subscription leaks.
+2. Remove runtime visual-tree reparenting.
+3. Introduce persistent marker visual objects.
+4. Implement marker selection state.
+5. Add drag support for markers.
+6. Add keyboard movement:
+
+   * Left/Right = 1 frame
+   * Shift+Left/Right = 10 frames
+7. Implement visual selected-state.
+8. Do not recreate marker visuals every frame.
+9. Prevent redraw storms.
+10. Slider updates must be throttled.
+11. Timeline must remain smooth during playback.
+12. All UI updates must avoid synchronous Dispatcher.Invoke.
+13. Preserve MVVM boundaries.
+14. Avoid allocating new rectangles during playback.
+15. Add support for:
+
+    * Input marker
+    * Output marker
+    * Cut markers
+16. Ensure markers cannot overlap invalid ranges.
+17. Keep FrameCursor permanently attached in XAML.
+18. Support future zooming architecture.
+
+
+CODEX-READY PROMPT — WRITEABLEBITMAP OPTIMIZATION
+Refactor BufferedVideoPlayer rendering pipeline to eliminate BitmapSource.Create allocations per frame.
+
+Requirements:
+
+1. Replace BitmapSource.Create with persistent WriteableBitmap reuse.
+2. Reuse unmanaged buffers.
+3. Avoid LOH allocations.
+4. Avoid frame-time GC spikes.
+5. Maintain frame-accurate playback.
+6. Keep ArrayPool usage.
+7. Preserve thread safety.
+8. Prevent UI-thread blocking.
+9. Ensure smooth playback at:
+
+   * 1080p60
+   * x4 speed
+10. Minimize allocations during playback loop.
 
 
 
