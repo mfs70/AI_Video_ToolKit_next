@@ -70,7 +70,21 @@ namespace AI_Video_ToolKit.UI.Services
             _hasActiveSession = true;
             _endedNaturally = false;
         }
-        public void Stop() { _player.Stop(); _isPlaying = false; _hasActiveSession = false; }
+		
+//        public void Stop() { _player.Stop(); _isPlaying = false; _hasActiveSession = false; }
+		
+		public void Stop()
+		{
+			_player.Stop();
+
+			_isPlaying = false;
+			_hasActiveSession = false;
+
+			_current = TimeSpan.Zero;
+
+			OnPositionChanged?.Invoke(TimeSpan.Zero);
+		}
+		
         public void ClearMedia() { Stop(); _currentFile = null; _current = TimeSpan.Zero; }
         public void SetPosition(TimeSpan position) { _current = position; _endedNaturally = false; }
 
