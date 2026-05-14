@@ -1,9 +1,16 @@
 ﻿1. STOP BUG  
 2. ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ PREVIEW после нажатия кнопки preview курсор прыгает в начало файла,потом в начало выбранного сегмента,
  и начинает его воспроизведение, дойдя до следующего маркера останавливается 
-3. MKV AUDIO DESYNC ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ MKV
+3. MKV AUDIO DESYNC ТОЧЕЧНОЕ ИСПРАВЛЕНИЕ MKV  исправлено
 
-
+BufferedVideoPlayer.cs
+FrameGrabber.cs
+FFmpegProcessService.cs
+TimelineControl.xaml.cs
+TimelineControl.xaml
+MainWindow.xaml
+MainWindow.xaml.cs
+App.xaml.cs
 
 
 
