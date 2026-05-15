@@ -21,62 +21,12 @@ namespace AI_Video_ToolKit.UI
         private readonly MainViewModel _viewModel;
         private readonly PlaybackService _playback;
 
-        // Новый centralized hotkey layer.
-        // Пока работает параллельно со старой системой.
-        private readonly HotkeyService _hotkeys;
-
         public MainWindow(MainViewModel viewModel, PlaybackService playback)
         {
             InitializeComponent();
             DataContext = viewModel;
             _viewModel = viewModel;
             _playback = playback;
-			// ------------------------------------------------------------
-			// Centralized hotkey system.
-			//
-			// Пока работает parallel mode.
-			// ------------------------------------------------------------
-			_hotkeys = new HotkeyService();
-
-            // Инициализация нового hotkey service.
-			_hotkeys.OnActionTriggered += action =>
-			{
-				Log($"[HOTKEY] {action}");
-				// --------------------------------------------------------
-				// FIRST REAL MIGRATION:
-				//
-				// centralized PlayPause hotkey.
-				// --------------------------------------------------------
-				switch (action)
-				{
-					case InputAction.PlayPause:
-						// Используем СУЩЕСТВУЮЩУЮ playback logic.
-						//
-						// Ничего не переписываем.
-						TogglePlayPause_Click(this, new RoutedEventArgs());
-						break;
-				}
-			};
-
-            // Подключаем keyboard interception.
-			
-//            PreviewKeyDown += MainWindow_PreviewKeyDown;
-
-			// ------------------------------------------------------------
-			// LOW-LEVEL keyboard interception.
-			//
-			// handledEventsToo: true
-			//
-			// Позволяет получать keyboard events
-			// даже если другой control уже поставил:
-			//
-			// e.Handled = true
-			// ------------------------------------------------------------
-			AddHandler(
-				Keyboard.PreviewKeyDownEvent,
-				new KeyEventHandler(MainWindow_PreviewKeyDown),
-				true);
-            
             _playback.OnLog += message => Dispatcher.Invoke(() => Log(message));
 
             double[] speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
@@ -299,10 +249,7 @@ namespace AI_Video_ToolKit.UI
         // ==================== Горячие клавиши ====================
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-//          if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
-		// -------Space migrated to centralized hotkey system. Старая logic отключена.----------------
-			if (e.Key == Key.Space) { return;}
-			
+            if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.K || e.Key == Key.S) { Stop_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeed(); e.Handled = true; return; }
@@ -424,50 +371,5 @@ namespace AI_Video_ToolKit.UI
             PlayIcon.Text = "▶";
             PlayIcon.Foreground = Brushes.White;
         }
-
-
-        // ------------------------------------------------------------
-        // Новый centralized hotkey handler.
-        //
-        // ВАЖНО:
-        //
-        // Пока НЕ удаляем старую keyboard logic.
-        // Новый слой работает параллельно.
-        //
-        // Это безопасный migration mode.
-        // ------------------------------------------------------------
-		
-					private void MainWindow_PreviewKeyDown(
-				object sender,
-				KeyEventArgs e)
-			{
-				Log(
-					$"[RAW KEY] " +
-					$"Key={e.Key} " +
-					$"Handled={e.Handled} " +
-					$"Modifiers={Keyboard.Modifiers}");
-
-				if (Keyboard.FocusedElement is TextBox)
-					return;
-
-				_hotkeys.TryHandle(e);
-			}
-		
- /*        private void MainWindow_PreviewKeyDown(
-            object sender,
-            KeyEventArgs e)
-        {
-            // Если focus находится внутри textbox —
-            // НЕ перехватываем keyboard input.
-            if (Keyboard.FocusedElement is TextBox)
-                return;
-
-            // Пока работаем в passive mode:
-            // только проверяем новые hotkeys.
-            //
-            // Старые handlers остаются активными.
-            _hotkeys.TryHandle(e);
-        } */
-
     }
 }
