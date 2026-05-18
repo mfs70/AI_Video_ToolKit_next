@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using AI_Video_ToolKit.UI.Controls;
 using AI_Video_ToolKit.UI.ViewModels;
 using AI_Video_ToolKit.UI.Services;
@@ -19,6 +20,9 @@ namespace AI_Video_ToolKit.UI
     {
         private readonly MainViewModel _viewModel;
         private readonly PlaybackService _playback;
+        private readonly DispatcherTimer _timelineRefreshTimer;
+        private DateTime _lastTimelinePositionLog = DateTime.MinValue;
+        private DateTime _lastTimelineSeekLog = DateTime.MinValue;
 
         public MainWindow(MainViewModel viewModel, PlaybackService playback)
         {
@@ -26,7 +30,16 @@ namespace AI_Video_ToolKit.UI
             DataContext = viewModel;
             _viewModel = viewModel;
             _playback = playback;
-            _playback.OnLog += message => Dispatcher.Invoke(() => Log(message));
+            _playback.OnLog += message => Dispatcher.BeginInvoke(() => Log(message));
+            _timelineRefreshTimer = new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = TimeSpan.FromMilliseconds(33)
+            };
+            _timelineRefreshTimer.Tick += (_, _) =>
+            {
+                if (_playback.IsPlaying)
+                    UpdatePositionUi(_playback.CurrentPosition, updatePlaybackService: false);
+            };
 
             double[] speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
             SpeedCombo.Items.Clear();
@@ -34,11 +47,16 @@ namespace AI_Video_ToolKit.UI
             SpeedCombo.SelectedIndex = 3;
 
             _viewModel.MarkersChanged += UpdateTimelineMarkers;
-            _viewModel.ImageLoaded += image => Dispatcher.Invoke(() =>
+            _viewModel.ImageLoaded += image => Dispatcher.BeginInvoke(() =>
             {
                 Preview.SetImage(image);
                 SetPausedState("🖼 Image loaded");
             });
+            Timeline.MarkerMoved += (type, original, moved) =>
+            {
+                _viewModel.MoveTimelineMarker(type.ToString(), original, moved);
+                UpdateTimelineMarkers();
+            };
 
             Timeline.OnChanged += async t =>
             {
@@ -46,14 +64,18 @@ namespace AI_Video_ToolKit.UI
                 SetPausedState();
             };
 
-            _playback.OnFrameChanged += frame => Dispatcher.Invoke(() => Preview.SetFrame(frame));
-            _playback.OnPositionChanged += pos => Dispatcher.Invoke(() =>
+            _playback.OnFrameChanged += frame =>
+            {
+                if (Dispatcher.CheckAccess()) Preview.SetFrame(frame);
+                else Dispatcher.BeginInvoke(() => Preview.SetFrame(frame));
+            };
+            _playback.OnPositionChanged += pos => Dispatcher.BeginInvoke(() =>
             {
                 // Playback events are raised from background decoding tasks; all WPF controls
                 // and bound view-model properties must be updated on the UI thread.
                 UpdatePositionUi(pos, updatePlaybackService: false);
             });
-            _playback.OnPlaybackEnded += () => Dispatcher.Invoke(() =>
+            _playback.OnPlaybackEnded += () => Dispatcher.BeginInvoke(() =>
             {
                 SetPausedState();
                 Log("Playback ended.");
@@ -79,12 +101,23 @@ namespace AI_Video_ToolKit.UI
             Timeline.SetCurrentTime(position);
             Timeline.SetFrameInfo(_viewModel.CurrentFrame, _viewModel.TotalFrames);
             FrameCountText.Text = $"{_viewModel.CurrentFrame}/{_viewModel.TotalFrames} frames";
+
+            if ((DateTime.Now - _lastTimelinePositionLog).TotalSeconds >= 1)
+            {
+                _lastTimelinePositionLog = DateTime.Now;
+                Log($"Timeline position: {position:hh\\:mm\\:ss\\.fff}, frame {_viewModel.CurrentFrame}/{_viewModel.TotalFrames}, duration {_viewModel.Duration}");
+            }
         }
 
         private async Task SeekToAsync(TimeSpan position)
         {
             _playback.Stop();
             UpdatePositionUi(position, updatePlaybackService: true);
+            if ((DateTime.Now - _lastTimelineSeekLog).TotalMilliseconds >= 250)
+            {
+                _lastTimelineSeekLog = DateTime.Now;
+                Log($"Timeline seek requested: {position:hh\\:mm\\:ss\\.fff}");
+            }
             if (string.IsNullOrEmpty(_viewModel.CurrentFile)) return;
 
             // Scrubbing changes the authoritative playback position. The preview frame
@@ -96,8 +129,10 @@ namespace AI_Video_ToolKit.UI
         private void UpdateTimelineMarkers()
         {
             var data = _viewModel.GetTimelineData();
+            Timeline.SetFrameRate(_viewModel.FileFps);
             Timeline.SetDuration(data.duration);
             Timeline.SetMarkers(data.input, data.output, data.cuts);
+            Log($"Timeline configured: duration={data.duration:0.###}s, fps={_viewModel.FileFps:0.###}, cuts={data.cuts.Count}");
         }
 
         // ==================== Кнопки транспорта ====================
@@ -389,6 +424,11 @@ namespace AI_Video_ToolKit.UI
             _viewModel.StatusText = status;
             PlayIcon.Text = "⏸";
             PlayIcon.Foreground = Brushes.Yellow;
+            if (!_timelineRefreshTimer.IsEnabled)
+            {
+                _timelineRefreshTimer.Start();
+                Log("Timeline refresh timer started.");
+            }
         }
 
         private async Task LoadAndSync(string filePath)
@@ -419,6 +459,11 @@ namespace AI_Video_ToolKit.UI
             _viewModel.StatusText = status;
             PlayIcon.Text = "▶";
             PlayIcon.Foreground = Brushes.White;
+            if (_timelineRefreshTimer.IsEnabled)
+            {
+                _timelineRefreshTimer.Stop();
+                Log("Timeline refresh timer stopped.");
+            }
         }
 
         private void SetStoppedState()
@@ -427,6 +472,11 @@ namespace AI_Video_ToolKit.UI
             _viewModel.StatusText = "⏹ Stopped";
             PlayIcon.Text = "▶";
             PlayIcon.Foreground = Brushes.White;
+            if (_timelineRefreshTimer.IsEnabled)
+            {
+                _timelineRefreshTimer.Stop();
+                Log("Timeline refresh timer stopped.");
+            }
         }
     }
 }

@@ -1,12 +1,15 @@
 // Файл: D:\AI_Video_ToolKit_next\AI_Video_ToolKit.UI\Services\BufferedVideoPlayer.cs
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows;
+using System.Windows.Threading;
 using AI_Video_ToolKit.Infrastructure.Services;
 using NAudio.Wave;
 
@@ -35,6 +38,7 @@ namespace AI_Video_ToolKit.UI.Services
         private TimeSpan _lastPosition;
         private Stopwatch? _playbackClock;
         private TimeSpan _playbackClockOffset;
+        private WriteableBitmap? _writeableBitmap;
 
         private WaveOutEvent? _waveOut;
         private BufferedWaveProvider? _waveProvider;
@@ -69,6 +73,7 @@ namespace AI_Video_ToolKit.UI.Services
                 _presentedFrames = 0;
                 _isPaused = false;
                 _stopping = false;
+                LogCallback?.Invoke($"Video pipeline start: {_width}x{_height}, stride={_stride}, frameSize={_frameSize}, fps={_fps:0.###}, speed={_speed:0.###}.");
 
                 _bufferedFrameCapacity = CalculateBufferCapacity(_width, _height);
                 _frameChannel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(_bufferedFrameCapacity)
@@ -315,12 +320,11 @@ namespace AI_Video_ToolKit.UI.Services
                             if (_playbackClock == null)
                             {
                                 _playbackClock = Stopwatch.StartNew();
-                                _waveOut?.Play();
                             }
 
-                            var bmp = BitmapSource.Create(_width, _height, 96, 96, PixelFormats.Bgr24, null, rentedBuffer, _stride);
-                            bmp.Freeze();
-                            OnFrame?.Invoke(bmp);
+                            await PresentFrameAsync(rentedBuffer, token);
+                            if (_presentedFrames == 0)
+                                _waveOut?.Play();
 
                             _presentedFrames++;
                             var clockElapsed = _playbackClockOffset + _playbackClock.Elapsed;
@@ -352,6 +356,33 @@ namespace AI_Video_ToolKit.UI.Services
                 if (completedNaturally)
                     FinishPlaybackNaturally();
             }
+        }
+
+        private async Task PresentFrameAsync(byte[] frameBuffer, CancellationToken token)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+                return;
+
+            await dispatcher.InvokeAsync(() =>
+            {
+                if (_writeableBitmap == null ||
+                    _writeableBitmap.PixelWidth != _width ||
+                    _writeableBitmap.PixelHeight != _height ||
+                    _writeableBitmap.Format != PixelFormats.Bgr24)
+                {
+                    _writeableBitmap = new WriteableBitmap(_width, _height, 96, 96, PixelFormats.Bgr24, null);
+                }
+
+                // WriteableBitmap owns the persistent unmanaged back buffer; the pooled
+                // FFmpeg buffer is copied into it and returned immediately after this call.
+                _writeableBitmap.WritePixels(
+                    new Int32Rect(0, 0, _width, _height),
+                    frameBuffer,
+                    _stride,
+                    0);
+                OnFrame?.Invoke(_writeableBitmap);
+            }, DispatcherPriority.Render, token);
         }
 
         public void Pause()

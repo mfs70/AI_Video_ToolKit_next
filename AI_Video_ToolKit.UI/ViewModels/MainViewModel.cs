@@ -288,6 +288,44 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public (double duration, TimeSpan? input, TimeSpan? output, IReadOnlyList<TimeSpan> cuts) GetTimelineData() =>
             (_fileDurationSec, _inputMarker != TimeSpan.Zero ? _inputMarker : null, _outputMarker != TimeSpan.Zero ? _outputMarker : null, _cutMarkers);
 
+        public void MoveTimelineMarker(string markerType, TimeSpan? original, TimeSpan moved)
+        {
+            moved = ClampToMedia(SnapToFrame(moved));
+            var frame = TimeSpan.FromSeconds(1 / Math.Max(0.0001, _fileFps));
+
+            if (markerType == "Input")
+            {
+                if (_outputMarker != TimeSpan.Zero && moved >= _outputMarker)
+                    moved = _outputMarker - frame;
+                _inputMarker = ClampToMedia(moved);
+                _cutMarkers.RemoveAll(c => c <= _inputMarker);
+            }
+            else if (markerType == "Output")
+            {
+                if (_inputMarker != TimeSpan.Zero && moved <= _inputMarker)
+                    moved = _inputMarker + frame;
+                _outputMarker = ClampToMedia(moved);
+                _cutMarkers.RemoveAll(c => c >= _outputMarker);
+            }
+            else if (markerType == "Cut" && original.HasValue)
+            {
+                var index = _cutMarkers.FindIndex(c => c == original.Value);
+                if (index < 0) return;
+
+                var min = _inputMarker != TimeSpan.Zero ? _inputMarker + frame : frame;
+                var max = _outputMarker != TimeSpan.Zero ? _outputMarker - frame : TimeSpan.FromSeconds(_fileDurationSec) - frame;
+                moved = TimeSpan.FromSeconds(Math.Clamp(moved.TotalSeconds, min.TotalSeconds, max.TotalSeconds));
+                if (_cutMarkers.Where((_, i) => i != index).Any(c => (c - moved).Duration() < frame))
+                    return;
+
+                _cutMarkers[index] = moved;
+                _cutMarkers.Sort();
+            }
+
+            RebuildSegments();
+            MarkersChanged?.Invoke();
+        }
+
         private static void RunOnUiThread(Action action)
         {
             var dispatcher = Application.Current?.Dispatcher;
@@ -297,9 +335,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 return;
             }
 
-            // Playback callbacks are produced by worker tasks, so marshal property changes
-            // before ObservableCollection or binding notifications reach WPF controls.
-            dispatcher.Invoke(action);
+            // Playback callbacks are produced by worker tasks. Queue property changes
+            // asynchronously so decoding never blocks on the UI thread.
+            dispatcher.BeginInvoke(action);
         }
 
         private void RebuildSegments()
@@ -322,6 +360,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
 
         private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * _fileFps);
+        private TimeSpan SnapToFrame(TimeSpan time) => TimeSpan.FromSeconds(Math.Round(time.TotalSeconds * _fileFps) / _fileFps);
+        private TimeSpan ClampToMedia(TimeSpan time) => TimeSpan.FromSeconds(Math.Clamp(time.TotalSeconds, 0, Math.Max(0, _fileDurationSec)));
         private static bool IsSupported(string ext) => ext is ".mp4" or ".mkv" or ".mov" or ".avi" or ".webm" or ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
         private static bool IsImage(string path) => Path.GetExtension(path).ToLower() is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
 
