@@ -1,1 +1,16 @@
+ Постепенный план рефакторинга (без поломки существующего кода)
+Добавить Messenger – зарегистрировать WeakReferenceMessenger.Default в DI (или использовать синглтон).
+
+Выделить PlaylistViewModel – перенести туда PlaylistItems, SelectedPlaylistItem, команды AddFiles, RemoveSelected, Clear. Временно оставить в MainViewModel вызовы LoadFile через сообщение.
+
+Выделить PlayerViewModel – перенести CurrentPosition, IsPlaying, Speed, методы PlayPause, Stop, Seek. MainViewModel перестаёт знать о PlaybackService.
+
+Выделить MarkersViewModel – перенести маркеры, сегменты, undo. MainViewModel удаляется полностью.
+
+Переделать TimelineControl на DependencyProperty (займёт 1-2 часа).
+
+Удалить всю логику из MainWindow.xaml.cs, заменив на привязки и behaviors.
+
+Удалить MainViewModel (старый монстр) – радостно похоронить.
+
 

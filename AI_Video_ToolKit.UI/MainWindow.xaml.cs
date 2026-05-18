@@ -13,6 +13,8 @@ using System.Windows.Threading;
 using AI_Video_ToolKit.UI.Controls;
 using AI_Video_ToolKit.UI.ViewModels;
 using AI_Video_ToolKit.UI.Services;
+using AI_Video_ToolKit.UI.Messages;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace AI_Video_ToolKit.UI
 {
@@ -21,15 +23,25 @@ namespace AI_Video_ToolKit.UI
         private readonly MainViewModel _viewModel;
         private readonly PlaybackService _playback;
         private readonly DispatcherTimer _timelineRefreshTimer;
+        private readonly IMessenger _messenger;
         private DateTime _lastTimelinePositionLog = DateTime.MinValue;
         private DateTime _lastTimelineSeekLog = DateTime.MinValue;
-
-        public MainWindow(MainViewModel viewModel, PlaybackService playback)
+        public MainWindow(MainViewModel viewModel, PlaybackService playback, IMessenger messenger)
+//       public MainWindow(MainViewModel viewModel, PlaybackService playback)
         {
             InitializeComponent();
             DataContext = viewModel;
             _viewModel = viewModel;
             _playback = playback;
+            
+            _messenger = messenger;
+ // Подписка на тестовое сообщение
+            _messenger.Register<PingMessage>(this, (r, m) =>
+            {
+                Log($"Messenger test: {m.Text}");
+            });
+
+
             _playback.OnLog += message => Dispatcher.BeginInvoke(() => Log(message));
             _timelineRefreshTimer = new DispatcherTimer(DispatcherPriority.Render)
             {
@@ -81,6 +93,8 @@ namespace AI_Video_ToolKit.UI
                 Log("Playback ended.");
             });
             Log("Application initialized.");
+    // Отправим тестовое сообщение при старте
+            _messenger.Send(new Messages.PingMessage("Fedor MainWindow initialized"));
         }
 
         private void Log(string text)
