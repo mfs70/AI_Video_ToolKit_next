@@ -30,6 +30,7 @@ namespace AI_Video_ToolKit.UI
 			services.AddTransient<FrameGrabber>();
 			services.AddSingleton<PlaybackService>();
 			services.AddSingleton<MainViewModel>();
+            services.AddSingleton<PlaylistViewModel>();
 			services.AddTransient<MainWindow>();
 			ServiceProvider = services.BuildServiceProvider();
 			var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();

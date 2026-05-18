@@ -6,12 +6,15 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Win32;
 using AI_Video_ToolKit.Infrastructure.Services;
 using AI_Video_ToolKit.UI.Services;
+using AI_Video_ToolKit.UI.Messages;
 
 namespace AI_Video_ToolKit.UI.ViewModels
 {
@@ -22,6 +25,10 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private readonly FFmpegProcessService _ffmpeg;
         private readonly PlaybackService _playback;
         private readonly FrameGrabber _grabber;
+
+        private readonly PlaylistViewModel _playlistVM;
+        public PlaylistViewModel PlaylistVM => _playlistVM;
+        private readonly IMessenger _messenger;
 
         // Состояние
         [ObservableProperty] private string _statusText = "✅ Ready";
@@ -63,9 +70,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public event Action<BitmapImage>? ImageLoaded;
 
         // Плейлист и монтажный стол
-        public ObservableCollection<PlaylistItem> PlaylistItems { get; } = new();
+//        public ObservableCollection<PlaylistItem> PlaylistItems { get; } = new();
         public ObservableCollection<MontageItem> MontageItems { get; } = new();
-        [ObservableProperty] private PlaylistItem? _selectedPlaylistItem;
+//        [ObservableProperty] private PlaylistItem? _selectedPlaylistItem;
 
         // Скорость
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
@@ -84,9 +91,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         // Конструктор
         public MainViewModel(FFprobeService ffprobe, FFmpegProcessService ffmpeg,
-            PlaybackService playback, FrameGrabber grabber)
+            PlaybackService playback, FrameGrabber grabber, PlaylistViewModel playlistVM, IMessenger messenger)
         {
-            _ffprobe = ffprobe; _ffmpeg = ffmpeg; _playback = playback; _grabber = grabber;
+            _ffprobe = ffprobe; _ffmpeg = ffmpeg; _playback = playback; _grabber = grabber; _playlistVM = playlistVM;
             _playback.OnFrameChanged += _ => { };
             _playback.OnPositionChanged += pos =>
             {
@@ -100,7 +107,28 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     StatusText = "⏸ Paused";
                 });
             };
+            // Подписка на сообщение LoadFileMessage в конструкторе MainViewModel
+            WeakReferenceMessenger.Default.Register<LoadFileMessage>(this, async (r, m) =>
+            {
+                await LoadFile(m.FilePath);
+            });
+
+            _messenger = messenger;
+            _messenger.Register<LoadFileMessage>(this, async (r, m) => await LoadFile(m.FilePath));
+
         }
+
+        // Прокси для совместимости со старым кодом
+        public ObservableCollection<PlaylistItem> PlaylistItems => _playlistVM.Items;
+        public PlaylistItem? SelectedPlaylistItem
+        {
+            get => _playlistVM.SelectedItem;
+            set => _playlistVM.SelectedItem = value;
+        }
+        public ICommand ClearPlaylistCommand => _playlistVM.ClearCommand;
+        public ICommand RemoveSelectedFromPlaylistCommand => _playlistVM.RemoveSelectedCommand;
+
+        public bool AddToPlaylist(string path) => _playlistVM.AddToPlaylist(path);
 
         // Команды управления файлами и плеером
         [RelayCommand]
@@ -122,22 +150,22 @@ namespace AI_Video_ToolKit.UI.ViewModels
             }
         }
 
-        [RelayCommand] private async Task ClearPlaylist() { PlaylistItems.Clear(); Segments.Clear(); MarkersChanged?.Invoke(); await Task.CompletedTask; }
-        [RelayCommand]
-        private async Task RemoveSelectedFromPlaylist()
-        {
-            if (SelectedPlaylistItem == null) return;
-
-            var removedIndex = PlaylistItems.IndexOf(SelectedPlaylistItem);
-            PlaylistItems.Remove(SelectedPlaylistItem);
-
-            // Keep keyboard/Next navigation anchored after deletion by selecting the
-            // item that slid into the removed row, or the previous item at the end.
-            if (PlaylistItems.Count > 0)
-                SelectedPlaylistItem = PlaylistItems[Math.Min(removedIndex, PlaylistItems.Count - 1)];
-
-            await Task.CompletedTask;
-        }
+//        [RelayCommand] private async Task ClearPlaylist() { PlaylistItems.Clear(); Segments.Clear(); MarkersChanged?.Invoke(); await Task.CompletedTask; }
+//        [RelayCommand]
+//        private async Task RemoveSelectedFromPlaylist()
+//        {
+//            if (SelectedPlaylistItem == null) return;
+//
+//            var removedIndex = PlaylistItems.IndexOf(SelectedPlaylistItem);
+//            PlaylistItems.Remove(SelectedPlaylistItem);
+//
+//            // Keep keyboard/Next navigation anchored after deletion by selecting the
+//            // item that slid into the removed row, or the previous item at the end.
+//           if (PlaylistItems.Count > 0)
+//                SelectedPlaylistItem = PlaylistItems[Math.Min(removedIndex, PlaylistItems.Count - 1)];
+//
+//            await Task.CompletedTask;
+//        }
 
         [RelayCommand]
         private async Task PlayPause()
@@ -165,7 +193,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private async Task Next()
         {
             if (PlaylistItems.Count == 0) return;
-            int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
+//              int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
+            int idx = _playlistVM.Items.IndexOf(_playlistVM.SelectedItem!);
             if (idx < 0 || idx >= PlaylistItems.Count - 1) idx = 0; else idx++;
             await LoadFile(PlaylistItems[idx].FilePath);
         }
@@ -174,7 +203,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private async Task Previous()
         {
             if (PlaylistItems.Count == 0) return;
-            int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
+//            int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
+            int idx = _playlistVM.Items.IndexOf(_playlistVM.SelectedItem!);
             if (idx <= 0) idx = PlaylistItems.Count - 1; else idx--;
             await LoadFile(PlaylistItems[idx].FilePath);
         }
@@ -242,23 +272,24 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
 
         // Публичные методы для окна
-        public bool AddToPlaylist(string path)
-        {
-            if (!File.Exists(path)) return false;
-            var ext = Path.GetExtension(path).ToLower();
-            if (!IsSupported(ext)) return false;
-
-            if (PlaylistItems.Any(item => string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
-                return false;
-
-            PlaylistItems.Add(new PlaylistItem { FilePath = path });
-            return true;
-        }
+//        public bool AddToPlaylist(string path)
+//        {
+//            if (!File.Exists(path)) return false;
+//            var ext = Path.GetExtension(path).ToLower();
+//            if (!IsSupported(ext)) return false;
+//
+//            if (PlaylistItems.Any(item => string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
+//                return false;
+//
+//            PlaylistItems.Add(new PlaylistItem { FilePath = path });
+//            return true;
+//        }
 
         public async Task LoadFile(string path)
         {
             _playback.Stop();
-            SelectedPlaylistItem = PlaylistItems.FirstOrDefault(item => item.FilePath == path);
+ //           SelectedPlaylistItem = PlaylistItems.FirstOrDefault(item => item.FilePath == path);
+            _playlistVM.SelectedItem = _playlistVM.Items.FirstOrDefault(item => item.FilePath == path);
             if (IsImage(path))
             {
                 _playback.ClearMedia();
