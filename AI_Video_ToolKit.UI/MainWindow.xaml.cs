@@ -12,7 +12,6 @@ using System.Windows.Media;
 using AI_Video_ToolKit.UI.Controls;
 using AI_Video_ToolKit.UI.ViewModels;
 using AI_Video_ToolKit.UI.Services;
-using AI_Video_ToolKit.UI.Hotkeys;
 
 namespace AI_Video_ToolKit.UI
 {
@@ -21,62 +20,12 @@ namespace AI_Video_ToolKit.UI
         private readonly MainViewModel _viewModel;
         private readonly PlaybackService _playback;
 
-        // Новый centralized hotkey layer.
-        // Пока работает параллельно со старой системой.
-        private readonly HotkeyService _hotkeys;
-
         public MainWindow(MainViewModel viewModel, PlaybackService playback)
         {
             InitializeComponent();
             DataContext = viewModel;
             _viewModel = viewModel;
             _playback = playback;
-			// ------------------------------------------------------------
-			// Centralized hotkey system.
-			//
-			// Пока работает parallel mode.
-			// ------------------------------------------------------------
-			_hotkeys = new HotkeyService();
-
-            // Инициализация нового hotkey service.
-			_hotkeys.OnActionTriggered += action =>
-			{
-				Log($"[HOTKEY] {action}");
-				// --------------------------------------------------------
-				// FIRST REAL MIGRATION:
-				//
-				// centralized PlayPause hotkey.
-				// --------------------------------------------------------
-				switch (action)
-				{
-					case InputAction.PlayPause:
-						// Используем СУЩЕСТВУЮЩУЮ playback logic.
-						//
-						// Ничего не переписываем.
-						TogglePlayPause_Click(this, new RoutedEventArgs());
-						break;
-				}
-			};
-
-            // Подключаем keyboard interception.
-			
-//            PreviewKeyDown += MainWindow_PreviewKeyDown;
-
-			// ------------------------------------------------------------
-			// LOW-LEVEL keyboard interception.
-			//
-			// handledEventsToo: true
-			//
-			// Позволяет получать keyboard events
-			// даже если другой control уже поставил:
-			//
-			// e.Handled = true
-			// ------------------------------------------------------------
-			AddHandler(
-				Keyboard.PreviewKeyDownEvent,
-				new KeyEventHandler(MainWindow_PreviewKeyDown),
-				true);
-            
             _playback.OnLog += message => Dispatcher.Invoke(() => Log(message));
 
             double[] speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
@@ -299,10 +248,7 @@ namespace AI_Video_ToolKit.UI
         // ==================== Горячие клавиши ====================
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-//          if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
-		// -------Space migrated to centralized hotkey system. Старая logic отключена.----------------
-			if (e.Key == Key.Space) { return;}
-			
+            if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.K || e.Key == Key.S) { Stop_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(sender, e); e.Handled = true; return; }
             if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeed(); e.Handled = true; return; }
@@ -379,6 +325,64 @@ namespace AI_Video_ToolKit.UI
             return firstAdded;
         }
 
+
+        // ------------------------------------------------------------
+        // Save logger contents to UTF-8 text file.
+        // ------------------------------------------------------------
+        private void SaveLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (LogList.Items.Count == 0)
+                {
+                    MessageBox.Show(
+                        "Log is empty.",
+                        "Save Log",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+
+                    return;
+                }
+
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "Save Log",
+                    Filter =
+                        "Log files (*.log)|*.log|" +
+                        "Text files (*.txt)|*.txt",
+
+                    DefaultExt = ".log",
+
+                    FileName =
+                        $"AI_Video_ToolKit_Log_" +
+                        $"{DateTime.Now:yyyyMMdd_HHmmss}.log"
+                };
+
+                if (dialog.ShowDialog() != true)
+                    return;
+
+                var lines = LogList.Items
+                    .Cast<object>()
+                    .Select(x => x?.ToString() ?? string.Empty)
+                    .ToArray();
+
+                File.WriteAllLines(
+                    dialog.FileName,
+                    lines,
+                    System.Text.Encoding.UTF8);
+
+                Log($"Log saved: {dialog.FileName}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Failed to save log:\n{ex.Message}",
+                    "Save Log Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
         private void SetPlayingState(string status)
         {
             _viewModel.IsPlaying = true;
@@ -424,50 +428,5 @@ namespace AI_Video_ToolKit.UI
             PlayIcon.Text = "▶";
             PlayIcon.Foreground = Brushes.White;
         }
-
-
-        // ------------------------------------------------------------
-        // Новый centralized hotkey handler.
-        //
-        // ВАЖНО:
-        //
-        // Пока НЕ удаляем старую keyboard logic.
-        // Новый слой работает параллельно.
-        //
-        // Это безопасный migration mode.
-        // ------------------------------------------------------------
-		
-					private void MainWindow_PreviewKeyDown(
-				object sender,
-				KeyEventArgs e)
-			{
-				Log(
-					$"[RAW KEY] " +
-					$"Key={e.Key} " +
-					$"Handled={e.Handled} " +
-					$"Modifiers={Keyboard.Modifiers}");
-
-				if (Keyboard.FocusedElement is TextBox)
-					return;
-
-				_hotkeys.TryHandle(e);
-			}
-		
- /*        private void MainWindow_PreviewKeyDown(
-            object sender,
-            KeyEventArgs e)
-        {
-            // Если focus находится внутри textbox —
-            // НЕ перехватываем keyboard input.
-            if (Keyboard.FocusedElement is TextBox)
-                return;
-
-            // Пока работаем в passive mode:
-            // только проверяем новые hotkeys.
-            //
-            // Старые handlers остаются активными.
-            _hotkeys.TryHandle(e);
-        } */
-
     }
 }

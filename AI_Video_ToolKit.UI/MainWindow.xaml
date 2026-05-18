@@ -531,12 +531,30 @@
                                         Orientation="Vertical">
                                 <GroupBox Header="📋 Logger"
                                                 Height="200">
-                                        <ListBox x:Name="LogList"
-                                                        Background="#0C0C0C"
-                                                 Foreground="{StaticResource LogTextBrush}"
-                                                        FontSize="10"
-                                                 VirtualizingStackPanel.IsVirtualizing="True"
-                                                 VirtualizingStackPanel.VirtualizationMode="Recycling"/>
+
+                                        <DockPanel>
+
+                                                <StackPanel DockPanel.Dock="Top"
+                                                                    Orientation="Horizontal"
+                                                                    Margin="4">
+
+                                                        <Button Content="💾 Save Log"
+                                                                        Width="100"
+                                                                        Height="24"
+                                                                        Margin="0,0,6,0"
+                                                                        Click="SaveLog_Click"/>
+
+                                                </StackPanel>
+
+                                                <ListBox x:Name="LogList"
+                                                                    Background="#0C0C0C"
+                                                         Foreground="{StaticResource LogTextBrush}"
+                                                                    FontSize="10"
+                                                         VirtualizingStackPanel.IsVirtualizing="True"
+                                                         VirtualizingStackPanel.VirtualizationMode="Recycling"/>
+
+                                        </DockPanel>
+
                                 </GroupBox>
                                 <GroupBox Header="✂️ Segments"
                                                 Height="200">
