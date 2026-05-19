@@ -29,6 +29,7 @@ namespace AI_Video_ToolKit.UI
 			services.AddTransient<BufferedVideoPlayer>();
 			services.AddTransient<FrameGrabber>();
 			services.AddSingleton<PlaybackService>();
+			services.AddSingleton<PlayerViewModel>();
 			services.AddSingleton<MainViewModel>();
             services.AddSingleton<PlaylistViewModel>();
 			services.AddTransient<MainWindow>();
