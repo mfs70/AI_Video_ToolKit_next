@@ -38,19 +38,12 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         public double FileFps => _currentInfo?.Fps ?? 25.0;
 
-public string CurrentFilePath { get; private set; } = "";
-public double DurationSeconds { get; private set; }
-public double Fps { get; private set; }
-public bool HasAudio { get; private set; }
-public long VideoBitrate { get; private set; }
-public TimeSpan TotalDuration => TimeSpan.FromSeconds(DurationSeconds);
-
-//        public string CurrentFilePath { get; private set; } = "";
-//        public double DurationSeconds => _currentInfo?.Duration ?? 0;
-//        public double Fps => _currentInfo?.Fps ?? 25;
-//        public bool HasAudio => _currentInfo?.HasAudio ?? false;
-//        public long VideoBitrate => _currentInfo?.VideoBitrate ?? 0;
-//        public TimeSpan TotalDuration => TimeSpan.FromSeconds(_currentInfo?.Duration ?? 0);
+        public string CurrentFilePath { get; private set; } = "";
+        public double DurationSeconds { get; private set; }
+        public double Fps { get; private set; }
+        public bool HasAudio { get; private set; }
+        public long VideoBitrate { get; private set; }
+        public TimeSpan TotalDuration => TimeSpan.FromSeconds(DurationSeconds);
 
         public PlayerViewModel(PlaybackService playback, FFprobeService ffprobe, IMessenger messenger)
         {
@@ -78,7 +71,7 @@ public TimeSpan TotalDuration => TimeSpan.FromSeconds(DurationSeconds);
                 _currentInfo = info;
 
                 // Обновляем UI-свойства
-                
+
                 DurationSeconds = info.Duration;
                 Fps = info.Fps;
                 HasAudio = info.HasAudio;

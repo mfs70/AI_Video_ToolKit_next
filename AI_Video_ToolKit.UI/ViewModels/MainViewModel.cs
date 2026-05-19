@@ -40,35 +40,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             set => SetProperty(ref _statusText, value);
         }
 
-
-//        [ObservableProperty] private string _statusText = "✅ Ready";
-//        [ObservableProperty] private bool _isPlaying;
-
-        // Метаданные текущего файла
-//        [ObservableProperty] private string _currentFile = "";
-//        [ObservableProperty] private string _currentFileName = "";
-//        [ObservableProperty] private string _resolution = "";
-//        [ObservableProperty] private string _fpsStr = "";
-//        [ObservableProperty] private string _codec = "";
-//        [ObservableProperty] private string _bitrate = "";
-//        [ObservableProperty] private string _duration = "";
-//        [ObservableProperty] private string _audioInfo = "";
-
-        // Позиция
-//        [ObservableProperty] private TimeSpan _currentPosition;
-//        [ObservableProperty] private long _currentFrame;
-//        [ObservableProperty] private long _totalFrames;
         public string CurrentTimeStr => CurrentPosition.ToString(@"hh\:mm\:ss");
-//       public string TotalTimeStr => _fileDurationSec > 0
-//            ? TimeSpan.FromSeconds(_fileDurationSec).ToString(@"hh\:mm\:ss")
-//            : "00:00:00";
-
-//        private double _fileDurationSec;
-//        private double _fileFps = 25;
-//        private long _videoBitrate;
-//        private bool _hasAudio;
-
-//        public double FileFps => _fileFps;
 
         // Маркеры и сегменты
         private TimeSpan _inputMarker;
@@ -87,25 +59,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public event Action? MarkersChanged;
         public event Action<BitmapImage>? ImageLoaded;
 
-        // Плейлист и монтажный стол
-//        public ObservableCollection<PlaylistItem> PlaylistItems { get; } = new();
         public ObservableCollection<MontageItem> MontageItems { get; } = new();
-//        [ObservableProperty] private PlaylistItem? _selectedPlaylistItem;
 
         // Скорость
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex = 3;
-//        [ObservableProperty] private int _selectedSpeedIndex = 3;
-//        public double Speed => _speeds[_speedIndex];
-//        partial void OnSelectedSpeedIndexChanged(int value)
-//        {
-//            if (value >= 0 && value < _speeds.Length)
-//            {
-//                _speedIndex = value;
-//                OnPropertyChanged(nameof(Speed));
-//                _playback.SetSpeed(Speed);
-//            }
-//        }
 
         // Конструктор
         public MainViewModel(FFprobeService ffprobe, FFmpegProcessService ffmpeg,
@@ -163,7 +121,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public string AudioInfo { get => _playerVM.AudioInfo; set => _playerVM.AudioInfo = value; }
         public long CurrentFrame { get => _playerVM.CurrentFrame; set => _playerVM.CurrentFrame = value; }
         public long TotalFrames { get => _playerVM.TotalFrames; set => _playerVM.TotalFrames = value; }
-//        public double FileFps => _playerVM.FileFps;
         public string TotalTimeStr => _playerVM.TotalDuration.ToString(@"hh\:mm\:ss");
         public string CurrentFile => _playerVM.CurrentFilePath;
 
@@ -190,9 +147,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public ICommand PlayPauseCommand => _playerVM.PlayPauseCommand;
         public ICommand StopCommand => _playerVM.StopCommand;
         public ICommand SeekCommand => _playerVM.SeekCommand;
-        // Удалите старые методы PlayPause, Stop, LoadFile и т.д. (перенесены в PlayerViewModel)
-        // Но LoadFile оставьте как вызов _playerVM.LoadFile (через сообщение?)
-
 
         // Для совместимости со старыми методами (если они вызываются из кода)
         public void  Next() => NextCommand.Execute(null);
@@ -219,45 +173,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     await LoadFile(PlaylistItems[0].FilePath);
             }
         }
-
-//        [RelayCommand] private async Task ClearPlaylist() { PlaylistItems.Clear(); Segments.Clear(); MarkersChanged?.Invoke(); await Task.CompletedTask; }
-//        [RelayCommand]
-//        private async Task RemoveSelectedFromPlaylist()
-//        {
-//            if (SelectedPlaylistItem == null) return;
-//
-//            var removedIndex = PlaylistItems.IndexOf(SelectedPlaylistItem);
-//            PlaylistItems.Remove(SelectedPlaylistItem);
-//
-//            // Keep keyboard/Next navigation anchored after deletion by selecting the
-//            // item that slid into the removed row, or the previous item at the end.
-//           if (PlaylistItems.Count > 0)
-//                SelectedPlaylistItem = PlaylistItems[Math.Min(removedIndex, PlaylistItems.Count - 1)];
-//
-//            await Task.CompletedTask;
-//        }
-
-//        [RelayCommand]
-//        private async Task PlayPause()
-//        {
-//            if (string.IsNullOrEmpty(CurrentFile))
-//            {
-//                if (PlaylistItems.Count > 0) await LoadFile(PlaylistItems[0].FilePath);
-//                return;
-//            }
-//            if (_playback.IsPlaying) { _playback.Pause(); IsPlaying = false; StatusText = "⏸ Paused"; }
-//            else { _playback.Resume(); IsPlaying = true; StatusText = "▶ Playing"; }
-//            await Task.CompletedTask;
-//        }
-
-//        [RelayCommand]
-//        private async Task Stop()
-//        {
-//            _playback.Stop(); IsPlaying = false; StatusText = "⏹ Stopped";
-//            CurrentPosition = TimeSpan.Zero; CurrentFrame = 0;
-//            OnPropertyChanged(nameof(CurrentTimeStr));
-//            await Task.CompletedTask;
-//        }
 
         // Маркеры
         [RelayCommand] private void MarkInput() { _undoStack.Push((MarkerActionType.InputSet, _inputMarker, null!)); _inputMarker = CurrentPosition; _cutMarkers.RemoveAll(c => c <= _inputMarker); RebuildSegments(); MarkersChanged?.Invoke(); }
@@ -295,7 +210,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             if (SelectedSegment == null) return;
             _playback.Stop();
             _playback.Start(CurrentFile, FileFps, SelectedSegment.Start, Speed, HasAudio, SelectedSegment.End);
-//заменил   _playback.Start(CurrentFile, _fileFps, SelectedSegment.Start, Speed, _hasAudio);
             IsPlaying = true; StatusText = "▶ Preview Segment";
             await Task.CompletedTask;
         }
@@ -315,30 +229,13 @@ namespace AI_Video_ToolKit.UI.ViewModels
             var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var bitrateKbps = Math.Max(1500, (int)((_playerVM.VideoBitrate > 0 ? _playerVM.VideoBitrate : 4_000_000) / 1000));
             var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 -movflags +faststart \"{outFile}\"";
-			// var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a copy -movflags +faststart \"{outFile}\"";
-            
 			var ok = await _ffmpeg.RunFfmpegAsync(args);
             if (!ok && File.Exists(outFile)) File.Delete(outFile);
         }
 
-        // Публичные методы для окна
-//        public bool AddToPlaylist(string path)
-//        {
-//            if (!File.Exists(path)) return false;
-//            var ext = Path.GetExtension(path).ToLower();
-//            if (!IsSupported(ext)) return false;
-//
-//            if (PlaylistItems.Any(item => string.Equals(item.FilePath, path, StringComparison.OrdinalIgnoreCase)))
-//                return false;
-//
-//            PlaylistItems.Add(new PlaylistItem { FilePath = path });
-//            return true;
-//        }
-
-        public async Task LoadFile(string path)
+         public async Task LoadFile(string path)
         {
             _playback.Stop();
- //           SelectedPlaylistItem = PlaylistItems.FirstOrDefault(item => item.FilePath == path);
             _playlistVM.SelectedItem = _playlistVM.Items.FirstOrDefault(item => item.FilePath == path);
             if (IsImage(path))
             {
@@ -348,15 +245,12 @@ namespace AI_Video_ToolKit.UI.ViewModels
             }
 
             var info = await _ffprobe.GetInfoAsync(path);
-//            CurrentFile = path; 
             CurrentFileName = Path.GetFileName(path);
             Resolution = $"{info.Width}x{info.Height}"; FpsStr = $"{info.Fps:0.##}";
             Codec = info.VideoCodec; Bitrate = $"{info.VideoBitrate / 1000:0} kbps";
             Duration = info.Duration > 0 ? TimeSpan.FromSeconds(info.Duration).ToString(@"hh\:mm\:ss") : "??:??:??";
             TotalFrames = (long)(info.Duration * info.Fps);
             AudioInfo = info.HasAudio ? $"{info.AudioCodec} {info.AudioSampleRate / 1000.0:F1}kHz {info.AudioChannels}ch {info.AudioBitrate / 1000:0}kbps" : "none";
- //           _playerVM.DurationSeconds = info.Duration;
- //           _playerVM.Fps = info.Fps; _playerVM.VideoBitrate = info.VideoBitrate; _playerVM.HasAudio = info.HasAudio;
             OnPropertyChanged(nameof(FileFps));
             _inputMarker = TimeSpan.Zero; _outputMarker = TimeSpan.Zero; _cutMarkers.Clear(); _undoStack.Clear(); SelectedSegment = null;
             RebuildSegments();
@@ -456,8 +350,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.EndInit();
             bitmap.Freeze();
-
- //           CurrentFile = path;
             CurrentFileName = Path.GetFileName(path);
             Resolution = $"{bitmap.PixelWidth}x{bitmap.PixelHeight}";
             FpsStr = "-";
@@ -468,11 +360,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             CurrentPosition = TimeSpan.Zero;
             CurrentFrame = 0;
             TotalFrames = 1;
- //           _playerVM.DurationSeconds = 0;
- //           _playerVM.Fps = 1;
             OnPropertyChanged(nameof(FileFps));
- //           _playerVM.VideoBitrate = 0;
- //           _playerVM.HasAudio = false;
             _inputMarker = TimeSpan.Zero;
             _outputMarker = TimeSpan.Zero;
             _cutMarkers.Clear();
