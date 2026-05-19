@@ -94,6 +94,13 @@ namespace AI_Video_ToolKit.UI.ViewModels
             PlaybackService playback, FrameGrabber grabber, PlaylistViewModel playlistVM, IMessenger messenger)
         {
             _ffprobe = ffprobe; _ffmpeg = ffmpeg; _playback = playback; _grabber = grabber; _playlistVM = playlistVM;
+            _playlistVM.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(PlaylistViewModel.SelectedItem))
+                {
+                    OnPropertyChanged(nameof(SelectedPlaylistItem));
+                }
+            };
             _playback.OnFrameChanged += _ => { };
             _playback.OnPositionChanged += pos =>
             {
@@ -127,6 +134,14 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
         public ICommand ClearPlaylistCommand => _playlistVM.ClearCommand;
         public ICommand RemoveSelectedFromPlaylistCommand => _playlistVM.RemoveSelectedCommand;
+        // прокси для команд MoveNext/MovePrevious
+        public ICommand NextCommand => _playlistVM.MoveNextCommand;
+        public ICommand PreviousCommand => _playlistVM.MovePreviousCommand;
+        public ICommand AddFilesCommand => _playlistVM.AddFilesCommand;
+
+        // Для совместимости со старыми методами (если они вызываются из кода)
+        public void  Next() => NextCommand.Execute(null);
+        public void  Previous() => PreviousCommand.Execute(null);
 
         public bool AddToPlaylist(string path) => _playlistVM.AddToPlaylist(path);
 
@@ -187,26 +202,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             CurrentPosition = TimeSpan.Zero; CurrentFrame = 0;
             OnPropertyChanged(nameof(CurrentTimeStr));
             await Task.CompletedTask;
-        }
-
-        [RelayCommand]
-        private async Task Next()
-        {
-            if (PlaylistItems.Count == 0) return;
-//              int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
-            int idx = _playlistVM.Items.IndexOf(_playlistVM.SelectedItem!);
-            if (idx < 0 || idx >= PlaylistItems.Count - 1) idx = 0; else idx++;
-            await LoadFile(PlaylistItems[idx].FilePath);
-        }
-
-        [RelayCommand]
-        private async Task Previous()
-        {
-            if (PlaylistItems.Count == 0) return;
-//            int idx = PlaylistItems.IndexOf(SelectedPlaylistItem!);
-            int idx = _playlistVM.Items.IndexOf(_playlistVM.SelectedItem!);
-            if (idx <= 0) idx = PlaylistItems.Count - 1; else idx--;
-            await LoadFile(PlaylistItems[idx].FilePath);
         }
 
         // Маркеры

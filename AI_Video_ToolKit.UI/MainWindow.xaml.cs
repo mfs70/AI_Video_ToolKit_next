@@ -150,25 +150,30 @@ namespace AI_Video_ToolKit.UI
         }
 
         // ==================== Кнопки транспорта ====================
-        private async void LoadMultiple_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new Microsoft.Win32.OpenFileDialog
+            private void LoadMultiple_Click(object sender, RoutedEventArgs e)
             {
-                Filter = "Media files|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.jpg;*.jpeg;*.png;*.bmp;*.gif",
-                Multiselect = true
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                foreach (var path in dlg.FileNames)
-                    _viewModel.AddToPlaylist(path);
-                if (_viewModel.PlaylistItems.Count > 0 && string.IsNullOrEmpty(_viewModel.CurrentFile))
-                {
-                    await _viewModel.LoadFile(_viewModel.PlaylistItems[0].FilePath);
-                    ScrollSelectedPlaylistItemIntoView();
-                    SyncPlaybackStateAfterLoad();
-                }
+                _viewModel.AddFilesCommand.Execute(null);
             }
-        }
+
+//        private async void LoadMultiple_Click(object sender, RoutedEventArgs e)
+//        {
+//            var dlg = new Microsoft.Win32.OpenFileDialog
+//            {
+//                Filter = "Media files|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.jpg;*.jpeg;*.png;*.bmp;*.gif",
+//                Multiselect = true
+//            };
+//            if (dlg.ShowDialog() == true)
+//            {
+//                foreach (var path in dlg.FileNames)
+//                    _viewModel.AddToPlaylist(path);
+//                if (_viewModel.PlaylistItems.Count > 0 && string.IsNullOrEmpty(_viewModel.CurrentFile))
+//                {
+//                    await _viewModel.LoadFile(_viewModel.PlaylistItems[0].FilePath);
+//                    ScrollSelectedPlaylistItemIntoView();
+//                    SyncPlaybackStateAfterLoad();
+//                }
+//            }
+//        }
 
         private async void TogglePlayPause_Click(object sender, RoutedEventArgs e)
         {
@@ -209,7 +214,15 @@ namespace AI_Video_ToolKit.UI
             Log("Playback stopped and reset to start.");
         }
 
-        private void Previous_Click(object sender, RoutedEventArgs e)
+		private void Previous_Click(object sender, RoutedEventArgs e)
+		{
+			_viewModel.Previous();
+		}
+		private void Next_Click(object sender, RoutedEventArgs e)
+		{
+			_viewModel.Next();
+		}
+        /* private void Previous_Click(object sender, RoutedEventArgs e)
         {
             if (_viewModel.PlaylistItems.Count == 0) return;
             int idx = _viewModel.PlaylistItems.IndexOf(_viewModel.SelectedPlaylistItem!);
@@ -225,7 +238,7 @@ namespace AI_Video_ToolKit.UI
             if (idx < 0 || idx >= _viewModel.PlaylistItems.Count - 1) idx = 0;
             else idx++;
             _ = LoadAndSync(_viewModel.PlaylistItems[idx].FilePath);
-        }
+        } */
 
         private async void PlaylistListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
@@ -241,9 +254,11 @@ namespace AI_Video_ToolKit.UI
             e.Handled = true;
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (items == null) return;
-            var firstAdded = AddDroppedFiles(items);
-            if (_viewModel.PlaylistItems.Count > 0 && string.IsNullOrEmpty(_viewModel.CurrentFile))
-                _ = LoadAndSync(firstAdded ?? _viewModel.PlaylistItems[0].FilePath);
+            AddDroppedFiles(items);
+// Загрузка первого файла теперь происходит внутри PlaylistViewModel, если плейлист был пуст
+//           var firstAdded = AddDroppedFiles(items);
+//            if (_viewModel.PlaylistItems.Count > 0 && string.IsNullOrEmpty(_viewModel.CurrentFile))
+//                _ = LoadAndSync(firstAdded ?? _viewModel.PlaylistItems[0].FilePath);
         }
 
         private void Playlist_DragOver(object sender, DragEventArgs e)
@@ -252,35 +267,39 @@ namespace AI_Video_ToolKit.UI
             e.Handled = true;
         }
 
-        private async void Window_Drop(object sender, DragEventArgs e)
+        private void Window_Drop(object sender, DragEventArgs e)
         {
             if (e.Handled) return;
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             e.Handled = true;
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (items == null) return;
-            var firstAdded = AddDroppedFiles(items);
-            if (_viewModel.PlaylistItems.Count > 0 && string.IsNullOrEmpty(_viewModel.CurrentFile))
-            {
-                await _viewModel.LoadFile(firstAdded ?? _viewModel.PlaylistItems[0].FilePath);
-                ScrollSelectedPlaylistItemIntoView();
-                SyncPlaybackStateAfterLoad();
-            }
+            AddDroppedFiles(items);
+// Загрузка первого файла теперь происходит внутри PlaylistViewModel, если плейлист был пуст
+//            var firstAdded = AddDroppedFiles(items);
+//            if (_viewModel.PlaylistItems.Count > 0 && string.IsNullOrEmpty(_viewModel.CurrentFile))
+//            {
+//                await _viewModel.LoadFile(firstAdded ?? _viewModel.PlaylistItems[0].FilePath);
+//                ScrollSelectedPlaylistItemIntoView();
+//                SyncPlaybackStateAfterLoad();
+//            }
         }
 
-        private async void Player_Drop(object sender, DragEventArgs e)
+        private void Player_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             e.Handled = true;
             var items = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (items == null) return;
-            var firstAdded = AddDroppedFiles(items);
-            if (firstAdded != null)
-            {
-                await _viewModel.LoadFile(firstAdded);
-                ScrollSelectedPlaylistItemIntoView();
-                SyncPlaybackStateAfterLoad();
-            }
+            AddDroppedFiles(items);
+// Загрузка первого файла теперь происходит внутри PlaylistViewModel, если плейлист был пуст
+//            var firstAdded = AddDroppedFiles(items);
+//            if (firstAdded != null)
+//            {
+//                await _viewModel.LoadFile(firstAdded);
+//                ScrollSelectedPlaylistItemIntoView();
+//                SyncPlaybackStateAfterLoad();
+//            }
         }
 
         private void Player_DragOver(object sender, DragEventArgs e)
