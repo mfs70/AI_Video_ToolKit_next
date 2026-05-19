@@ -1,0 +1,385 @@
+
+1. проанализировать проект, исправить ошибки, привести проект в работоспособное состояние.
+ подробно объяснять изменения и добавлять комментарии в код.
+
+
+Сначала быстро осмотрю структуру, статус git и основные проектные файлы, чтобы понять стек и не задеть ваши текущие изменения. Потом соберу/прогоню тесты, если они есть, и уже по конкретным ошибкам пойду чинить.
+
+Вижу .NET/WPF-решение с Core/Domain/Infrastructure/UI и один новый неотслеживаемый файл Docs/deff_git.txt, его не трогаю.
+ Сейчас проверю целевую версию SDK и соберу решение, чтобы получить реальный список поломок, а не гадать по коду.
+ 
+Сборка после доступа к NuGet проходит чисто: 0 ошибок и 0 предупреждений. Значит компиляторный слой уже живой;
+ дальше смотрю runtime-риски в ключевых местах UI, ffmpeg/ffprobe и таймлайна, плюс файлы с заметками об ошибках из Docs.
+
+Нашёл важный симптом: проект собирается, но часть исходников сохранена с битой кодировкой,
+ из-за чего в интерфейсе вместо иконок и русских комментариев появляются строки вроде вЏё и РљРЅ....
+ Это не ломает компиляцию, но ломает UX; параллельно проверяю wiring DI и сервисы,
+ где чаще всплывают runtime-ошибки.
+
+Похоже, основные рабочие риски не в синтаксисе, а в рантайме:
+ UI-обновления приходят из фоновых потоков плеера,
+ пути к ffmpeg/ffprobe жёстко прибиты к C:\_Portable_..., а кодировка текста испорчена.
+ Я буду чинить это точечно: централизую путь к FFmpeg, переведу UI-события на Dispatcher
+ и восстановлю читаемые строки/комментарии в исходниках.
+
+Механическая попытка восстановить кодировку оказалась неудачной:
+ git показывает, что в HEAD строки уже были нормальными, а вывод Get-Content просто путал картину.
+ Я откатываю только свои повреждения в отслеживаемых исходниках и дальше буду править вручную,
+ без массового перекодирования.
+
+Кодировка восстановлена к исходному состоянию, в XAML действительно нормальные символы.
+ Перехожу к реальным правкам: уберу жёсткую зависимость от одного абсолютного пути ffmpeg,
+ сделаю безопасное чтение процессов и переведу фоновые события плеера на UI-поток.
+
+
+Изменено 7 файлов
+Редактирование FFmpegProcessService.cs +92 -56
+Редактирование FrameGrabber.cs +26 -19
+Редактирование BufferedVideoPlayer.cs +24 -19
+Редактирование MainWindow.xaml.cs +69 -54
+Редактирование MainViewModel.cs +35 -20
+Редактирование App.xaml.cs +12 -7
+Редактирование MainViewModel.cs +59 -13
+Редактирование MainWindow.xaml.cs +70 -41
+Редактирование FFmpegProcessService.cs +0 -1
+Редактирование FFprobeService.cs +8 -8
+Редактирование FrameGrabber.cs +1 -1
+Редактирование MainViewModel.cs +1 -0
+
+Сейчас уже внесены не косметические, а эксплуатационные правки:
+ общий сервис ffmpeg используется и плеером, и захватом кадров;
+ статичные изображения больше не пытаются запускаться как видео;
+ фоновые события плеера не трогают WPF-контролы напрямую.
+ Запускаю сборку и затем посмотрю дифф на лишние/сомнительные изменения.
+
+Сборка после правок зелёная: 0 ошибок, 0 предупреждений.
+ Теперь делаю спокойный просмотр диффа и ищу тонкие проблемы, которые сборка не ловит:
+ двойные события, неправильные статусы, отсутствие selected item, утечки временных файлов.
+
+Изменено 4 файла
+Редактирование PlaybackService.cs +10 -4
+Редактирование MainViewModel.cs +1 -0
+Редактирование FFmpegProcessService.cs +4 -2
+Редактирование MainWindow.xaml.cs +2 -1
+
+Финальная сборка снова чистая. Остался последний проход:
+ проверяю whitespace/дифф и фиксирую, какие файлы затронуты;
+ Docs/deff_git.txt остаётся вашим неотслеживаемым файлом, я его не менял.
+
+Готово. Проект приведён в рабочее состояние на уровне сборки:
+ `dotnet build AI_Video_ToolKit_next.sln` проходит успешно, 0 ошибок и 0 предупреждений.
+
+Что исправил:
+- В [FFmpegProcessService.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.Infrastructure/Services/FFmpegProcessService.cs:21)
+ централизовал поиск `ffmpeg/ffprobe`:
+ сначала заданный путь,
+ затем переменные окружения `FFMPEG` / `FFPROBE`,
+ затем `PATH`.
+ Теперь проект не завязан жёстко только на `C:\_Portable_\ffmpeg\bin`.
+- В [FFmpegProcessService.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.Infrastructure/Services/FFmpegProcessService.cs:82)
+ добавил параллельное чтение `stdout/stderr`, чтобы процессы FFmpeg не зависали при большом выводе.
+- В [MainWindow.xaml.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/MainWindow.xaml.cs:52)
+ перевёл обновление WPF-контролов из callback-ов плеера через `Dispatcher`, 
+ иначе приложение могло падать из-за обращения к UI из фонового потока.
+- В [MainViewModel.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/ViewModels/MainViewModel.cs:266)
+ добавил безопасный helper для обновления bindable-свойств на UI-потоке.
+- В [MainViewModel.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/ViewModels/MainViewModel.cs:235)
+ добавил отдельную загрузку изображений: `.jpg/.png/.bmp/.gif` больше не пытаются запускаться как видео через FFmpeg.
+- В [PlaybackService.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Services/PlaybackService.cs:47)
+ защитил `Resume()` от запуска без текущего видео и добавил очистку текущего media-состояния для изображений.
+- В [FrameGrabber.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Services/FrameGrabber.cs:24)
+ убрал утечку временного `.tmp` файла и сделал время FFmpeg culture-invariant.
+- В [FFprobeService.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.Infrastructure/Services/FFprobeService.cs:63)
+ сделал парсинг строк `key=value` устойчивее.
+
+Добавил комментарии в код там, где они реально помогают:
+ про UI-thread marshalling и про чтение потоков FFmpeg без deadlock.
+
+Проверки:
+- `dotnet build AI_Video_ToolKit_next.sln` успешно.
+- `git diff --check` без ошибок whitespace.
+- `Docs/deff_git.txt` остался неотслеживаемым пользовательским файлом, я его не менял.
+
+
+2. В окне логгера ничего не отображается надо исправить.
+ В чекбоксе скорости не видна цифра, при нажатии можно изменить и мышкой и горячими клавишами,
+ а в обычном состоянии цифра не отображается(не видна). При загрузке файла, проигрывание начинается,
+ но до конца не доходит, при нажатии стоп сбрасывается в начало,
+ но повторное воспроизведение при нажатии кнопки плей не происходит,
+ проигрывание происходит только при нажатии кнопки некст.
+ При перетаскивании файла на окно плеера в плейлисте появляется два файла.
+
+Понял, это уже конкретные UI/runtime-баги. Сначала найду разметку логгера, ComboBox скорости
+ и текущую логику drag/drop/playback,
+ потом внесу точечные правки и снова соберу проект.
+
+Нашёл четыре корня: логгер вообще не наполняется, потому что метод Log исчез из текущего окна;
+ ComboBox самодельного шаблона показывает SelectedItem через неверный binding;
+ Stop полностью убивает ffmpeg-процесс, а Play потом пытается только Resume без перезапуска;
+ drop всплывает от плеера до окна и добавляет файл повторно. Исправляю эти места связно.
+
+Изменено 4 файла
+Правки внесены:
+ добавил наполнение логгера, починил шаблон скорости, остановку теперь можно запустить заново через Play,
+ а drag/drop помечается обработанным сразу и не всплывает во Window_Drop.
+ Дополнительно плейлист теперь не принимает дубликаты одного и того же пути.
+ Собираю и ловлю компиляторные огрехи.
+
+Изменён 1 файл
+Сборка прошла, но появились предупреждения из-за string? в файле с #nullable disable; убрал их,
+ чтобы вернуть чистую сборку без шума.
+
+Исправил указанные проблемы.
+Что изменено:
+Логгер теперь реально заполняется: добавил Log(...) в MainWindow.xaml.cs и подключил сообщения от плеера.
+ComboBox скорости теперь показывает выбранное значение в обычном закрытом состоянии:
+ поправил binding внутри шаблона в MainWindow.xaml.
+После Stop повторное нажатие Play снова запускает файл с начала:
+ в PlaybackService.cs Resume() теперь перезапускает процесс, если он был остановлен.
+При Stop позиция плеера сбрасывается в 00:00, включая внутреннюю позицию PlaybackService.
+При drag/drop на окно плеера файл больше не добавляется дважды:
+ обработчик теперь сразу ставит e.Handled = true, а добавление вынесено в общий метод.
+Плейлист больше не добавляет дубликаты одного и того же пути:
+ исправлено в MainViewModel.cs.
+При перетаскивании на плеер загружается именно новый добавленный файл, а не первый элемент плейлиста.
+
+Проверка: dotnet build AI_Video_ToolKit_next.sln проходит успешно, 0 ошибок и 0 предупреждений.
+Docs/deff_git.txt по-прежнему не трогал, он остаётся вашим неотслеживаемым файлом.
+
+
+3. при загрузке в плейлист множества файлов(появляется прокрутка) и переключении некст-некст-некст...
+  выделенный файл не отображается в видимой зоне.  проигрывание не доходит до конца и останавливается,
+  при повторном нажатии плей еще немного(несколко кадров) проигрывается и сново пауза и так ло конца файла.
+  При двойном клике на файле в плейлисте он должен загружаться в плеер и начинать проигрывание.
+
+Понял, это три связанные вещи:
+ видимость выбранного элемента в прокручиваемом плейлисте,
+ корректное естественное завершение буферизированного проигрывания
+ и двойной клик по плейлисту.
+ Сейчас посмотрю разметку ListBox и цикл завершения BufferedVideoPlayer, потом поправлю без лишнего размаха.
+
+Нашёл точную причину «доигрывает по несколько кадров»:
+ плеер останавливал себя в момент, когда FFmpeg уже дочитал файл,
+ но внутренний буфер кадров ещё не был показан.
+ То есть конец источника принимался за конец отображения.
+ Исправляю так, чтобы завершение происходило после полного draining буфера.
+
+Изменено 4 файла
+Добавил ещё небольшую страховку:
+ если файл действительно дошёл до конца, следующее Play начнёт его с начала, а не с последнего таймкода.
+ Теперь собираю проект и проверяю, нет ли предупреждений.
+
+Сама компиляция кода дошла до UI-проекта, но финальная запись AI_Video_ToolKit.UI.exe заблокирована
+ уже запущенным экземпляром приложения (AI_Video_ToolKit.UI, PID 23372).
+ Я уберу новые предупреждения в плеере и повторю проверку способом,
+ который не пытается перезаписать запущенный .exe.
+
+Изменён 1 файл
+Поймал два оставшихся обращения к уже удалённым служебным флагам в BufferedVideoPlayer; убрал.
+ Повторяю сборку в режиме без apphost, чтобы не мешал открытый экземпляр приложения.
+
+Исправил три новых сценария.
+В MainWindow.xaml добавил двойной клик по PlaylistListBox:
+ теперь файл из плейлиста загружается в плеер и сразу запускается.
+ В MainWindow.xaml.cs после LoadFile вызывается PlaylistListBox.ScrollIntoView(...),
+ поэтому при Next/Next/Next выбранный файл прокручивается в видимую область.
+ Главную проблему с проигрыванием поправил в BufferedVideoPlayer.cs:
+ раньше плеер считал воспроизведение завершённым, когда FFmpeg дочитал файл,
+ хотя в канале ещё оставались буферизированные кадры.
+ Теперь завершение происходит после того, как PlaybackLoop показал весь буфер.
+ В PlaybackService.cs также добавил нормальное поведение после настоящего конца файла:
+ следующее Play начинает воспроизведение с начала.
+Проверка: dotnet build AI_Video_ToolKit_next.sln -p:UseAppHost=false проходит успешно, 0 ошибок и 0 предупреждений. Обычная сборка без UseAppHost=false сейчас блокируется запущенным AI_Video_ToolKit.UI.exe с PID 23372, то есть открытым экземпляром приложения.
+
+4. Проигрывание видео и проигрывание аудио никак не синхронизированы.
+ Счетчик кадров не привязан к курсору таймлайна,
+ при воспроизведении они отображаются вместе, а при перетаскивании мышкой отдельно,
+ так же не работаю горячие клавиши перемещения (стрелки влево вправо по кадру, и стрелки с шифтом по 10 кадров).
+ При перемещении курсора мышкой и последующего нажатия плей, проигрывается с позиции на которой курсор стоял ранее,
+ а не с текущей позиции. После нажатии кнопки удаление выделеного в плейлисте,
+ выделение не перемещается на следующий файл.
+
+Принял. Тут уже пора выровнять одну центральную модель позиции:
+ таймлайн, счётчик кадров, drag мышью, горячие клавиши и старт Play должны смотреть в один CurrentPosition,
+ а не жить параллельно. Сначала проверю текущие обработчики таймлайна и удаления из плейлиста,
+ затем поправлю поток позиции и сборку.
+
+Сейчас правлю две важные архитектурные мелочи:
+ при ручном перемещении таймлайна буду сразу обновлять позицию PlaybackService,
+ а шаги клавишами переведу через общий метод позиционирования.
+ Для аудио/видео сделаю общий старт: аудио не будет начинать играть раньше первого видеокадра,
+ а видеопозиция будет считаться от часов воспроизведения, а не только от счётчика выданных кадров.
+
+Изменено 3 файла
+Позицию теперь синхронизирую в одном месте:
+ и таймлайн, и счётчик кадров, и PlaybackService получают один и тот же TimeSpan.
+ Также добавил удаление через клавишу Delete с переносом выделения,
+ а для аудио включил старт вместе с первым видеокадром и atempo при изменении скорости. Собираю.
+
+Авто-разрешение на обычную сборку с доступом к пользовательскому NuGet.Config отклонилось из-за лимита среды.
+ Попробую более безопасную проверку без restore и без доступа к внешнему NuGet-конфигу;
+ если и она упрётся в sandbox, честно отмечу это в результате.
+
+Исправил текущий набор проблем.
+Что сделано:
+ Таймлайн, счётчик кадров и позиция плеера теперь обновляются через один общий путь в MainWindow.xaml.cs.
+ При перетаскивании курсора мышью позиция сразу записывается в PlaybackService,
+ поэтому последующий Play стартует именно с текущего положения курсора. 
+ Горячие клавиши Left/Right и Shift+Left/Shift+Right теперь двигают позицию по 1 или 10 кадров,
+ обновляют таймлайн, счётчик кадров, внутреннюю позицию плеера и preview-кадр.
+ В BufferedVideoPlayer.cs аудио больше не стартует раньше видео:
+ WaveOut запускается вместе с первым показанным видеокадром.
+ Для изменения скорости добавлен atempo, чтобы аудио не оставалось на обычной скорости при 0.5x, 2x и т.п.
+ Видеопозиция теперь считается от часов воспроизведения, а не только от количества показанных кадров,
+ что уменьшает рассинхрон между таймлайном, кадрами и аудио.
+ После удаления выделенного файла из плейлиста в MainViewModel.cs выделение переходит на следующий файл,
+ а если удалён последний, на предыдущий.
+ Клавиша Delete теперь тоже удаляет выделенный файл из плейлиста и оставляет корректное выделение.
+ Проверка прошла:
+ dotnet build AI_Video_ToolKit_next.sln --no-restore -p:UseAppHost=false
+ Результат: 0 ошибок, 0 предупреждений.
+ Обычную сборку с restore не запускал повторно из-за ограничения среды, но проверочная сборка кода прошла чисто.
+
+5. Refactor TimelineControl into a production-grade frame-accurate timeline. 
+
+Requirements:
+
+1. Remove all event subscription leaks.
+2. Remove runtime visual-tree reparenting.
+3. Introduce persistent marker visual objects.
+4. Implement marker selection state.
+5. Add drag support for markers.
+6. Add keyboard movement:
+
+   * Left/Right = 1 frame
+   * Shift+Left/Right = 10 frames
+7. Implement visual selected-state.
+8. Do not recreate marker visuals every frame.
+9. Prevent redraw storms.
+10. Slider updates must be throttled.
+11. Timeline must remain smooth during playback.
+12. All UI updates must avoid synchronous Dispatcher.Invoke.
+13. Preserve MVVM boundaries.
+14. Avoid allocating new rectangles during playback.
+15. Add support for:
+
+    * Input marker
+    * Output marker
+    * Cut markers
+16. Ensure markers cannot overlap invalid ranges.
+17. Keep FrameCursor permanently attached in XAML.
+18. Support future zooming architecture.
+
+
+ 
+Refactor BufferedVideoPlayer rendering pipeline to eliminate BitmapSource.Create allocations per frame.
+
+Requirements:
+
+1. Replace BitmapSource.Create with persistent WriteableBitmap reuse.
+2. Reuse unmanaged buffers.
+3. Avoid LOH allocations.
+4. Avoid frame-time GC spikes.
+5. Maintain frame-accurate playback.
+6. Keep ArrayPool usage.
+7. Preserve thread safety.
+8. Prevent UI-thread blocking.
+9. Ensure smooth playback at:
+
+   * 1080p60
+   * x4 speed
+10. Minimize allocations during playback loop.
+
+
+I’ll refactor this in two passes: first the timeline control so markers become persistent, draggable, and frame-aware; then the video player loop so frames update a reused WriteableBitmap instead of allocating a new BitmapSource per frame. I’ll keep the existing public surface as much as possible, then wire the new marker-move events into the view model.
+
+
+
+I’ve got the playback side partly aligned, but the full request needs a deeper timeline rewrite rather than another patch on the old Canvas.Clear() approach. I’m replacing TimelineControl with persistent named marker visuals, a retained cut-marker pool, throttled slider notifications, and marker move events that the view model validates.
+
+
+Создано 2 файла удалено 2 файла
+The retained timeline is now in place; I’m wiring it into MainWindow/MainViewModel and replacing the frame render hot path. One important detail: the reused WriteableBitmap must be updated on the UI dispatcher, so I’m using asynchronous dispatcher scheduling rather than blocking Invoke.
+
+
+Изменено 4 файла
+The hot path now uses WriteableBitmap.WritePixels into a retained bitmap, with frame buffers still coming from ArrayPool and returned after the async UI copy. I also removed the remaining synchronous Dispatcher.Invoke in the window layer. Now I’m building to catch API and XAML issues from the larger refactor.
+
+
+Изменено 2 файла
+One remaining synchronous dispatcher call was in the view model helper from earlier work. I replaced it with BeginInvoke, so UI property propagation is now queued asynchronously instead of blocking decoder/playback work. Final build and checks now.
+
+Готово. Сделал большой рефактор именно по двум указанным зонам.
+
+В [TimelineControl.xaml](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Controls/TimelineControl.xaml) и [TimelineControl.xaml.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Controls/TimelineControl.xaml.cs):
+
+- `FrameCursor` теперь постоянно живёт в XAML, без reparenting.
+- Input/Output markers тоже постоянные визуальные объекты.
+- Cut markers используют retained pool: новые прямоугольники создаются только при росте количества cut-маркеров, не на каждый кадр.
+- Убраны event subscription leaks: обработчики больше не навешиваются внутри `SetMarkers`.
+- Добавлено выделение маркеров и визуальное selected-state.
+- Добавлен drag маркеров мышью.
+- Добавлено перемещение выбранного маркера клавиатурой:
+  - `Left/Right` = 1 frame
+  - `Shift+Left/Right` = 10 frames
+- Slider throttled через `DispatcherTimer` на ~16 ms.
+- Layout маркеров обновляется без пересоздания визуалов.
+- Добавлена базовая архитектура под будущий zoom: вся геометрия идёт через `TimeToX` / `XToTime`.
+
+В [MainWindow.xaml.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/MainWindow.xaml.cs) и [MainViewModel.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/ViewModels/MainViewModel.cs):
+
+- Подключил `Timeline.MarkerMoved` к VM без прямого доступа контрола к данным.
+- VM валидирует диапазоны маркеров: input/output/cut не уезжают в недопустимые пересечения.
+- Убрал оставшиеся синхронные `Dispatcher.Invoke`; теперь используется async dispatch через `BeginInvoke`/`InvokeAsync`.
+
+В [BufferedVideoPlayer.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Services/BufferedVideoPlayer.cs):
+
+- Убрал `BitmapSource.Create` из playback hot path.
+- Добавил persistent `WriteableBitmap`.
+- Кадры из `ArrayPool` копируются в постоянный unmanaged back buffer через `WritePixels`.
+- `OnFrame` отдаёт тот же переиспользуемый bitmap.
+- UI update идёт через `Dispatcher.InvokeAsync(..., DispatcherPriority.Render)`, без блокирующего `Invoke`.
+- `ArrayPool` сохранён, pooled buffers возвращаются после копирования кадра.
+- Минимизированы per-frame managed allocations и GC pressure.
+
+Проверка прошла чисто:
+
+`dotnet build AI_Video_ToolKit_next.sln --no-restore -p:UseAppHost=false`
+
+Результат: 0 ошибок, 0 предупреждений.
+
+
+
+6. таймлайн не работает. после загрузки файла воспроизведение начинается но таймлайн не работает.
+ используй логгер для диагностики. необходимо исправить
+
+
+
+
+
+
+
+
+
+Исправил свежие проблемы по логу и таймлайну.
+
+В логе `D:\AI_Video_ToolKit_next\test\AI_Video_ToolKit_Log_20260518_072840.log` ключевая ошибка была:
+
+`Playback error: Arithmetic operation resulted in an overflow.`
+
+Причина: в [BufferedVideoPlayer.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Services/BufferedVideoPlayer.cs)
+ был вызван не того overload у `WriteableBitmap.WritePixels`: размер буфера передавался как `stride`, 
+ из-за этого видеокадр падал на отрисовке. Поэтому звук шел, а видео/таймлайн фактически ломались. 
+ Исправил на корректный вызов `WritePixels(rect, frameBuffer, _stride, 0)`. 
+ Также перенёс старт аудио после успешной отрисовки первого кадра, чтобы звук не начинал играть отдельно от видео
+ при ошибке рендера.
+
+По таймлайну:
+- в [TimelineControl.xaml.cs](D:/AI_Video_ToolKit_next/AI_Video_ToolKit.UI/Controls/TimelineControl.xaml.cs) добавил перетаскивание самого курсора/playhead по области таймлайна;
+- seek теперь ставится с привязкой к кадру и проходит через throttling;
+- номер кадра над маркером сделал видимым и стабильным: `MinWidth`, `ZIndex`, рамка, корректное ограничение по краям;
+- поправил перемещение cut-маркеров клавиатурой, чтобы обновлялся существующий визуальный объект, а не терялась связь с ним.
+
+Проверка:
+- `dotnet build AI_Video_ToolKit.UI\AI_Video_ToolKit.UI.csproj --no-restore -p:UseAppHost=false -p:OutDir=D:\AI_Video_ToolKit_next\artifacts\verify-build\` прошёл успешно, `0` ошибок, `0` предупреждений.
+- обычная сборка в `bin` была заблокирована запущенным процессом `AI_Video_ToolKit.UI (15200)`, который держит dll. Нужно закрыть текущее окно приложения и запустить заново, чтобы увидеть эти правки в обычной сборке.
