@@ -73,6 +73,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _playerVM = playerVM;
             _playlistVM.PropertyChanged += (s, e) =>
             {
+                // Проксируем событие изменения свойства из PlayerViewModel в MainViewModel
+                OnPropertyChanged(e.PropertyName);
                 if (e.PropertyName == nameof(PlaylistViewModel.SelectedItem))
                 {
                     OnPropertyChanged(nameof(SelectedPlaylistItem));

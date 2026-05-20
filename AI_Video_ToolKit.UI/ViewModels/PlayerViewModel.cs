@@ -70,6 +70,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 var info = await _ffprobe.GetInfoAsync(path);
                 _currentInfo = info;
 
+                System.Diagnostics.Debug.WriteLine($"Resolution={Resolution}, Fps={FpsStr}"); // временное логирование
+
                 // Обновляем UI-свойства
 
                 DurationSeconds = info.Duration;
@@ -97,6 +99,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 _messenger.Send(new FileLoadedMessage(path, info.Duration, info.Fps, info.HasAudio, info.VideoBitrate));
                 OnPropertyChanged(nameof(FileFps));
                 OnPropertyChanged(nameof(TotalDuration));
+
+                System.Diagnostics.Debug.WriteLine($"PlayerViewModel: Resolution={Resolution}, Fps={FpsStr}"); //временное логирование
+
             }
             catch (Exception ex)
             {
