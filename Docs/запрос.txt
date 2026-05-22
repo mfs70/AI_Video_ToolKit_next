@@ -14,3 +14,18 @@
 Удалить MainViewModel (старый монстр) – радостно похоронить.
 
 
+
+
+
+Дополнительные улучшения
+Выделить интерфейсы для сервисов (уже есть FFprobeService — хорошо бы интерфейс IMediaInfoProvider). Тогда в PlayerViewModel используем IMediaInfoProvider, а не конкретную реализацию.
+
+Внедрить IDialogService для открытия/сохранения файлов (чтобы OpenFileDialog не вызывался прямо из ViewModel).
+
+Асинхронные команды с отменой (CancellationToken) — при экспорте длинных видео.
+
+Использовать ReactiveUI вместо ручных событий, но это более радикально.
+
+Перенести логику экспорта из MainViewModel в ExportViewModel, который будет слушать SegmentRebuiltMessage и предоставлять команды ExportSelected, ExportAll.
+
+Исправить баги: в ExportSegment параметр -c:a copy закомментирован и заменён на -c:a aac — лучше сделать выбор пользователя. Также в аргументах FFmpeg не хватает экранирования кавычек для Windows (хотя C# экранирует).

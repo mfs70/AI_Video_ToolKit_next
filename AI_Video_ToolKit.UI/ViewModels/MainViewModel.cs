@@ -21,26 +21,23 @@ namespace AI_Video_ToolKit.UI.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        // Сервисы
         private readonly FFprobeService _ffprobe;
         private readonly FFmpegProcessService _ffmpeg;
         private readonly PlaybackService _playback;
         private readonly FrameGrabber _grabber;
-        private readonly PlayerViewModel _playerVM;   //
+        private readonly PlayerViewModel _playerVM;
         private readonly PlaylistViewModel _playlistVM;
-        public PlaylistViewModel PlaylistVM => _playlistVM;
         private readonly IMessenger _messenger;
 
-        // Состояние
+        public PlaylistViewModel PlaylistVM => _playlistVM;
 
+        // Состояние
         private string _statusText = "✅ Ready";
         public string StatusText
         {
             get => _statusText;
             set => SetProperty(ref _statusText, value);
         }
-
-        public string CurrentTimeStr => CurrentPosition.ToString(@"hh\:mm\:ss");
 
         // Маркеры и сегменты
         private TimeSpan _inputMarker;
@@ -67,20 +64,32 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         // Конструктор
         public MainViewModel(FFprobeService ffprobe, FFmpegProcessService ffmpeg,
-            PlaybackService playback, FrameGrabber grabber, PlaylistViewModel playlistVM, IMessenger messenger, PlayerViewModel playerVM)
+            PlaybackService playback, FrameGrabber grabber, PlaylistViewModel playlistVM,
+            PlayerViewModel playerVM, IMessenger messenger)
         {
-            _ffprobe = ffprobe; _ffmpeg = ffmpeg; _playback = playback; _grabber = grabber; _playlistVM = playlistVM;
+            _ffprobe = ffprobe;
+            _ffmpeg = ffmpeg;
+            _playback = playback;
+            _grabber = grabber;
+            _playlistVM = playlistVM;
             _playerVM = playerVM;
+            _messenger = messenger;
+
+            // Подписка на изменения свойств PlayerViewModel для проброса в UI
+            _playerVM.PropertyChanged += (s, e) =>
+            {
+                // Проксируем все изменения свойств из PlayerViewModel в MainViewModel
+                OnPropertyChanged(e.PropertyName);
+            };
+
+            // Подписка на изменения свойств PlaylistViewModel (для SelectedItem)
             _playlistVM.PropertyChanged += (s, e) =>
             {
-                // Проксируем событие изменения свойства из PlayerViewModel в MainViewModel
-                OnPropertyChanged(e.PropertyName);
                 if (e.PropertyName == nameof(PlaylistViewModel.SelectedItem))
-                {
                     OnPropertyChanged(nameof(SelectedPlaylistItem));
-                }
+                // Можно добавить другие проксируемые свойства, если потребуется
             };
-            _playback.OnFrameChanged += _ => { };
+
             _playback.OnPositionChanged += pos =>
             {
                 RunOnUiThread(() => UpdatePosition(pos));
@@ -93,26 +102,51 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     StatusText = "⏸ Paused";
                 });
             };
-            // Подписка на сообщение LoadFileMessage в конструкторе MainViewModel
-            WeakReferenceMessenger.Default.Register<LoadFileMessage>(this, async (r, m) =>
+
+            // Подписываемся на сообщение о загрузке файла, чтобы синхронизировать маркеры и сброс состояния
+            _messenger.Register<FileLoadedMessage>(this, (r, m) =>
             {
-                await LoadFile(m.FilePath);
+                // Сброс маркеров, когда загружен новый файл
+                _inputMarker = TimeSpan.Zero;
+                _outputMarker = TimeSpan.Zero;
+                _cutMarkers.Clear();
+                _undoStack.Clear();
+                SelectedSegment = null;
+                RebuildSegments();
+                MarkersChanged?.Invoke();
+                StatusText = "▶ Playing";
             });
 
-            _messenger = messenger;
-            _messenger.Register<LoadFileMessage>(this, async (r, m) => await LoadFile(m.FilePath));
+            // Регистрация на сообщение для изображений (опционально)
+            _messenger.Register<ImageLoadedMessage>(this, (r, m) =>
+            {
+                // Здесь можно загрузить изображение в Preview, но пока оставим как есть
+                StatusText = "🖼 Image loaded";
+            });
+        }
 
+        // Временный прокси-метод для совместимости со старым кодом в MainWindow.xaml.cs
+        public Task LoadFile(string path)
+        {
+            _messenger.Send(new LoadFileMessage(path));
+            return Task.CompletedTask;
         }
 
 
-        // Прокси-свойства (замените существующие соответствующие свойства)
+        // Прокси-свойства (напрямую из PlayerViewModel)
         public bool IsPlaying { get => _playerVM.IsPlaying; set => _playerVM.IsPlaying = value; }
         public TimeSpan CurrentPosition { get => _playerVM.CurrentPosition; set => _playerVM.CurrentPosition = value; }
         public double Speed => _playerVM.Speed;
         public int SelectedSpeedIndex
         {
-            get => _speedIndex; // оставляем старую логику скорости? лучше перенести в PlayerViewModel, но пока оставим как есть
-            set { _speedIndex = value; OnPropertyChanged(); _playerVM.Speed = _speeds[_speedIndex]; }
+            get => _speedIndex;
+            set
+            {
+                if (_speedIndex == value) return;
+                _speedIndex = value;
+                OnPropertyChanged();
+                _playerVM.Speed = _speeds[_speedIndex];
+            }
         }
         public string CurrentFileName { get => _playerVM.CurrentFileName; set => _playerVM.CurrentFileName = value; }
         public string Resolution { get => _playerVM.Resolution; set => _playerVM.Resolution = value; }
@@ -131,8 +165,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public bool HasAudio => _playerVM.HasAudio;
         public long VideoBitrate => _playerVM.VideoBitrate;
 
-
-        // Прокси для совместимости со старым кодом
+        // Прокси для плейлиста
         public ObservableCollection<PlaylistItem> PlaylistItems => _playlistVM.Items;
         public PlaylistItem? SelectedPlaylistItem
         {
@@ -141,40 +174,19 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
         public ICommand ClearPlaylistCommand => _playlistVM.ClearCommand;
         public ICommand RemoveSelectedFromPlaylistCommand => _playlistVM.RemoveSelectedCommand;
-        // прокси для команд MoveNext/MovePrevious
         public ICommand NextCommand => _playlistVM.MoveNextCommand;
         public ICommand PreviousCommand => _playlistVM.MovePreviousCommand;
         public ICommand AddFilesCommand => _playlistVM.AddFilesCommand;
-        // Прокси-команды
+
+        // Прокси-команды плеера
         public ICommand PlayPauseCommand => _playerVM.PlayPauseCommand;
         public ICommand StopCommand => _playerVM.StopCommand;
         public ICommand SeekCommand => _playerVM.SeekCommand;
 
-        // Для совместимости со старыми методами (если они вызываются из кода)
-        public void  Next() => NextCommand.Execute(null);
-        public void  Previous() => PreviousCommand.Execute(null);
-
+        // Для совместимости со старыми обработчиками в MainWindow.xaml.cs
+        public void Next() => NextCommand.Execute(null);
+        public void Previous() => PreviousCommand.Execute(null);
         public bool AddToPlaylist(string path) => _playlistVM.AddToPlaylist(path);
-
-        // Команды управления файлами и плеером
-        [RelayCommand]
-        private async Task LoadFiles()
-        {
-            var dlg = new OpenFileDialog
-            {
-                Filter = "Media files|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.jpg;*.jpeg;*.png;*.bmp;*.gif",
-                Multiselect = true
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    foreach (var path in dlg.FileNames) AddToPlaylist(path);
-                });
-                if (PlaylistItems.Count > 0 && string.IsNullOrEmpty(CurrentFile))
-                    await LoadFile(PlaylistItems[0].FilePath);
-            }
-        }
 
         // Маркеры
         [RelayCommand] private void MarkInput() { _undoStack.Push((MarkerActionType.InputSet, _inputMarker, null!)); _inputMarker = CurrentPosition; _cutMarkers.RemoveAll(c => c <= _inputMarker); RebuildSegments(); MarkersChanged?.Invoke(); }
@@ -212,7 +224,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
             if (SelectedSegment == null) return;
             _playback.Stop();
             _playback.Start(CurrentFile, FileFps, SelectedSegment.Start, Speed, HasAudio, SelectedSegment.End);
-            IsPlaying = true; StatusText = "▶ Preview Segment";
+            IsPlaying = true;
+            StatusText = "▶ Preview Segment";
             await Task.CompletedTask;
         }
 
@@ -231,39 +244,14 @@ namespace AI_Video_ToolKit.UI.ViewModels
             var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var bitrateKbps = Math.Max(1500, (int)((_playerVM.VideoBitrate > 0 ? _playerVM.VideoBitrate : 4_000_000) / 1000));
             var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 -movflags +faststart \"{outFile}\"";
-			var ok = await _ffmpeg.RunFfmpegAsync(args);
+            var ok = await _ffmpeg.RunFfmpegAsync(args);
             if (!ok && File.Exists(outFile)) File.Delete(outFile);
         }
 
-         public async Task LoadFile(string path)
-        {
-            _playback.Stop();
-            _playlistVM.SelectedItem = _playlistVM.Items.FirstOrDefault(item => item.FilePath == path);
-            if (IsImage(path))
-            {
-                _playback.ClearMedia();
-                LoadImageFile(path);
-                return;
-            }
-
-            var info = await _ffprobe.GetInfoAsync(path);
-            CurrentFileName = Path.GetFileName(path);
-            Resolution = $"{info.Width}x{info.Height}"; FpsStr = $"{info.Fps:0.##}";
-            Codec = info.VideoCodec; Bitrate = $"{info.VideoBitrate / 1000:0} kbps";
-            Duration = info.Duration > 0 ? TimeSpan.FromSeconds(info.Duration).ToString(@"hh\:mm\:ss") : "??:??:??";
-            TotalFrames = (long)(info.Duration * info.Fps);
-            AudioInfo = info.HasAudio ? $"{info.AudioCodec} {info.AudioSampleRate / 1000.0:F1}kHz {info.AudioChannels}ch {info.AudioBitrate / 1000:0}kbps" : "none";
-            OnPropertyChanged(nameof(FileFps));
-            _inputMarker = TimeSpan.Zero; _outputMarker = TimeSpan.Zero; _cutMarkers.Clear(); _undoStack.Clear(); SelectedSegment = null;
-            RebuildSegments();
-            MarkersChanged?.Invoke();
-            UpdatePosition(TimeSpan.Zero);
-            _playback.Start(path, info.Fps, TimeSpan.Zero, Speed, info.HasAudio);
-            IsPlaying = true; StatusText = "▶ Playing";
-            OnPropertyChanged(nameof(TotalTimeStr));
-        }
-
+        // Вспомогательные методы (без дублирования загрузки файлов)
         public void UpdatePosition(TimeSpan pos) { CurrentPosition = pos; CurrentFrame = TimeToFrame(pos); OnPropertyChanged(nameof(CurrentTimeStr)); }
+        public string CurrentTimeStr => CurrentPosition.ToString(@"hh\:mm\:ss");
+
         public (double duration, TimeSpan? input, TimeSpan? output, IReadOnlyList<TimeSpan> cuts) GetTimelineData() =>
             (_playerVM.DurationSeconds, _inputMarker != TimeSpan.Zero ? _inputMarker : null, _outputMarker != TimeSpan.Zero ? _outputMarker : null, _cutMarkers);
 
@@ -313,9 +301,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 action();
                 return;
             }
-
-            // Playback callbacks are produced by worker tasks. Queue property changes
-            // asynchronously so decoding never blocks on the UI thread.
             dispatcher.BeginInvoke(action);
         }
 
@@ -341,9 +326,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * _playerVM.Fps);
         private TimeSpan SnapToFrame(TimeSpan time) => TimeSpan.FromSeconds(Math.Round(time.TotalSeconds * _playerVM.Fps) / _playerVM.Fps);
         private TimeSpan ClampToMedia(TimeSpan time) => TimeSpan.FromSeconds(Math.Clamp(time.TotalSeconds, 0, Math.Max(0, _playerVM.DurationSeconds)));
-        private static bool IsSupported(string ext) => ext is ".mp4" or ".mkv" or ".mov" or ".avi" or ".webm" or ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
-        private static bool IsImage(string path) => Path.GetExtension(path).ToLower() is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
 
+        // Загрузка изображений (специфичная логика, пока оставим здесь, но можно перенести в PlayerViewModel)
         private void LoadImageFile(string path)
         {
             var bitmap = new BitmapImage();
@@ -352,6 +336,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.EndInit();
             bitmap.Freeze();
+
             CurrentFileName = Path.GetFileName(path);
             Resolution = $"{bitmap.PixelWidth}x{bitmap.PixelHeight}";
             FpsStr = "-";
@@ -375,9 +360,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
             MarkersChanged?.Invoke();
             ImageLoaded?.Invoke(bitmap);
         }
+
+        private static bool IsImage(string path) => Path.GetExtension(path).ToLower() is ".jpg" or ".jpeg" or ".png" or ".bmp" or ".gif";
     }
 
-    // Вспомогательные классы
+    // Вспомогательные классы (без изменений)
     public class PlaylistItem
     {
         public string FilePath { get; set; } = "";
