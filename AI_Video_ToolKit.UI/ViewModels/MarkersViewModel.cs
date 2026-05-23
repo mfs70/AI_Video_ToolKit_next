@@ -3,12 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using AI_Video_ToolKit.UI.Messages;
-using AI_Video_ToolKit.UI.ViewModels;
+using AI_Video_ToolKit.UI.Services;   // <-- Добавить для PlaybackService
 
 namespace AI_Video_ToolKit.UI.ViewModels
 {
@@ -18,7 +17,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
     public partial class MarkersViewModel : ObservableObject
     {
         private readonly IMessenger _messenger;
-        private readonly PlaybackService _playback; // нужен для получения текущей позиции (можно через PositionChangedMessage, но пока упростим)
+        private readonly PlaybackService _playback;
 
         private TimeSpan _inputMarker;
         private TimeSpan _outputMarker;
@@ -44,9 +43,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger = messenger;
             _playback = playback;
 
-            // Подписываемся на события изменения позиции (чтобы знать, где ставить маркеры)
-            // Но можно получать текущую позицию через _playback.CurrentPosition
-            // Подпишемся на сообщение о загрузке нового файла
             _messenger.Register<FileLoadedMessage>(this, (r, m) =>
             {
                 Reset(m.Duration, m.Fps);
@@ -65,7 +61,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             MarkersChanged?.Invoke();
         }
 
-        // Текущая позиция (берём из PlaybackService)
         private TimeSpan CurrentPosition => _playback.CurrentPosition;
 
         [RelayCommand]
@@ -222,18 +217,4 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private TimeSpan SnapToFrame(TimeSpan time) => TimeSpan.FromSeconds(Math.Round(time.TotalSeconds * _fps) / _fps);
         private TimeSpan ClampToMedia(TimeSpan time) => TimeSpan.FromSeconds(Math.Clamp(time.TotalSeconds, 0, Math.Max(0, _duration)));
     }
-
-    // Вспомогательные классы (дублируем, чтобы не зависеть от MainViewModel)
-    public class SegmentInfo
-    {
-        public int Index { get; set; }
-        public TimeSpan Start { get; set; }
-        public TimeSpan End { get; set; }
-        public long StartFrame { get; set; }
-        public long EndFrame { get; set; }
-        public TimeSpan Duration => End - Start;
-        public override string ToString() => $"{Index:000}_{Start:hh\\:mm\\:ss\\.fff}_{End:hh\\:mm\\:ss\\.fff}";
-    }
-
-    internal enum MarkerActionType { InputSet, OutputSet, CutAdd, CutClear }
 }

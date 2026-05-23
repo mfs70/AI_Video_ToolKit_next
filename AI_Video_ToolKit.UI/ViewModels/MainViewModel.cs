@@ -28,6 +28,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private readonly PlayerViewModel _playerVM;
         private readonly PlaylistViewModel _playlistVM;
         private readonly IMessenger _messenger;
+        private readonly MarkersViewModel _markersVM;
 
         public PlaylistViewModel PlaylistVM => _playlistVM;
 
@@ -40,18 +41,23 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
 
         // Маркеры и сегменты
-        private TimeSpan _inputMarker;
-        private TimeSpan _outputMarker;
-        private readonly List<TimeSpan> _cutMarkers = new();
-        private readonly Stack<(MarkerActionType Type, TimeSpan Value, List<TimeSpan> CutSnapshot)> _undoStack = new();
-        public ObservableCollection<SegmentInfo> Segments { get; } = new();
 
-        private SegmentInfo? _selectedSegment;
+        //        public ObservableCollection<SegmentInfo> Segments { get; } = new();
+        public ObservableCollection<SegmentInfo> Segments => _markersVM.Segments;
         public SegmentInfo? SelectedSegment
         {
-            get => _selectedSegment;
-            set => SetProperty(ref _selectedSegment, value);
+            get => _markersVM.SelectedSegment;
+            set => _markersVM.SelectedSegment = value;
         }
+        public ICommand MarkInputCommand => _markersVM.MarkInputCommand;
+        public ICommand MarkOutputCommand => _markersVM.MarkOutputCommand;
+        public ICommand MarkCutCommand => _markersVM.MarkCutCommand;
+        public ICommand UndoMarkerCommand => _markersVM.UndoMarkerCommand;
+        public ICommand ClearCutsCommand => _markersVM.ClearCutsCommand;
+        public (double duration, TimeSpan? input, TimeSpan? output, IReadOnlyList<TimeSpan> cuts) GetTimelineData()
+            => _markersVM.GetTimelineData();
+        public void MoveTimelineMarker(string markerType, TimeSpan? original, TimeSpan moved)
+            => _markersVM.MoveTimelineMarker(markerType, original, moved);
 
         public event Action? MarkersChanged;
         public event Action<BitmapImage>? ImageLoaded;
@@ -65,7 +71,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         // Конструктор
         public MainViewModel(FFprobeService ffprobe, FFmpegProcessService ffmpeg,
             PlaybackService playback, FrameGrabber grabber, PlaylistViewModel playlistVM,
-            PlayerViewModel playerVM, IMessenger messenger)
+            PlayerViewModel playerVM, IMessenger messenger, MarkersViewModel markersVM)
         {
             _ffprobe = ffprobe;
             _ffmpeg = ffmpeg;
@@ -74,6 +80,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _playlistVM = playlistVM;
             _playerVM = playerVM;
             _messenger = messenger;
+            _markersVM = markersVM;
 
             // Подписка на изменения свойств PlayerViewModel для проброса в UI
             _playerVM.PropertyChanged += (s, e) =>
@@ -89,6 +96,10 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     OnPropertyChanged(nameof(SelectedPlaylistItem));
                 // Можно добавить другие проксируемые свойства, если потребуется
             };
+
+            //подписка на  событие MarkersChanged для проброса в UI (если нужно обновлять что-то в UI, например, TimelineControl)
+            //  и перенаправлять событие
+            _markersVM.MarkersChanged += () => MarkersChanged?.Invoke();
 
             _playback.OnPositionChanged += pos =>
             {
@@ -107,12 +118,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Register<FileLoadedMessage>(this, (r, m) =>
             {
                 // Сброс маркеров, когда загружен новый файл
-                _inputMarker = TimeSpan.Zero;
-                _outputMarker = TimeSpan.Zero;
-                _cutMarkers.Clear();
-                _undoStack.Clear();
-                SelectedSegment = null;
-                RebuildSegments();
                 MarkersChanged?.Invoke();
                 StatusText = "▶ Playing";
             });
@@ -189,33 +194,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public bool AddToPlaylist(string path) => _playlistVM.AddToPlaylist(path);
 
         // Маркеры
-        [RelayCommand] private void MarkInput() { _undoStack.Push((MarkerActionType.InputSet, _inputMarker, null!)); _inputMarker = CurrentPosition; _cutMarkers.RemoveAll(c => c <= _inputMarker); RebuildSegments(); MarkersChanged?.Invoke(); }
-        [RelayCommand] private void MarkOutput() { _undoStack.Push((MarkerActionType.OutputSet, _outputMarker, null!)); _outputMarker = CurrentPosition; _cutMarkers.RemoveAll(c => c >= _outputMarker); RebuildSegments(); MarkersChanged?.Invoke(); }
-        [RelayCommand]
-        private void MarkCut()
-        {
-            var pos = CurrentPosition;
-            if (_inputMarker != TimeSpan.Zero && pos <= _inputMarker) return;
-            if (_outputMarker != TimeSpan.Zero && pos >= _outputMarker) return;
-            _cutMarkers.Add(pos); _cutMarkers.Sort();
-            _undoStack.Push((MarkerActionType.CutAdd, pos, null!));
-            RebuildSegments(); MarkersChanged?.Invoke();
-        }
-        [RelayCommand]
-        private void UndoMarker()
-        {
-            if (_undoStack.Count == 0) return;
-            var action = _undoStack.Pop();
-            switch (action.Type)
-            {
-                case MarkerActionType.InputSet: _inputMarker = action.Value; break;
-                case MarkerActionType.OutputSet: _outputMarker = action.Value; break;
-                case MarkerActionType.CutAdd: if (action.Value != TimeSpan.Zero) _cutMarkers.Remove(action.Value); break;
-                case MarkerActionType.CutClear: _cutMarkers.Clear(); if (action.CutSnapshot != null) _cutMarkers.AddRange(action.CutSnapshot); break;
-            }
-            RebuildSegments(); MarkersChanged?.Invoke();
-        }
-        [RelayCommand] private void ClearCuts() { if (_cutMarkers.Count == 0) return; _undoStack.Push((MarkerActionType.CutClear, TimeSpan.Zero, new List<TimeSpan>(_cutMarkers))); _cutMarkers.Clear(); RebuildSegments(); MarkersChanged?.Invoke(); }
 
         // Предпросмотр и экспорт
         [RelayCommand]
@@ -249,49 +227,22 @@ namespace AI_Video_ToolKit.UI.ViewModels
         }
 
         // Вспомогательные методы (без дублирования загрузки файлов)
-        public void UpdatePosition(TimeSpan pos) { CurrentPosition = pos; CurrentFrame = TimeToFrame(pos); OnPropertyChanged(nameof(CurrentTimeStr)); }
-        public string CurrentTimeStr => CurrentPosition.ToString(@"hh\:mm\:ss");
 
-        public (double duration, TimeSpan? input, TimeSpan? output, IReadOnlyList<TimeSpan> cuts) GetTimelineData() =>
-            (_playerVM.DurationSeconds, _inputMarker != TimeSpan.Zero ? _inputMarker : null, _outputMarker != TimeSpan.Zero ? _outputMarker : null, _cutMarkers);
+        //        public void UpdatePosition(TimeSpan pos)
+        // {
+        //  CurrentPosition = pos;
+        //  CurrentFrame = TimeToFrame(pos);
+        //  OnPropertyChanged(nameof(CurrentTimeStr));
+        // }
 
-        public void MoveTimelineMarker(string markerType, TimeSpan? original, TimeSpan moved)
+        public void UpdatePosition(TimeSpan pos)
         {
-            moved = ClampToMedia(SnapToFrame(moved));
-            var frame = TimeSpan.FromSeconds(1 / Math.Max(0.0001, _playerVM.Fps));
-
-            if (markerType == "Input")
-            {
-                if (_outputMarker != TimeSpan.Zero && moved >= _outputMarker)
-                    moved = _outputMarker - frame;
-                _inputMarker = ClampToMedia(moved);
-                _cutMarkers.RemoveAll(c => c <= _inputMarker);
-            }
-            else if (markerType == "Output")
-            {
-                if (_inputMarker != TimeSpan.Zero && moved <= _inputMarker)
-                    moved = _inputMarker + frame;
-                _outputMarker = ClampToMedia(moved);
-                _cutMarkers.RemoveAll(c => c >= _outputMarker);
-            }
-            else if (markerType == "Cut" && original.HasValue)
-            {
-                var index = _cutMarkers.FindIndex(c => c == original.Value);
-                if (index < 0) return;
-
-                var min = _inputMarker != TimeSpan.Zero ? _inputMarker + frame : frame;
-                var max = _outputMarker != TimeSpan.Zero ? _outputMarker - frame : TimeSpan.FromSeconds(_playerVM.DurationSeconds) - frame;
-                moved = TimeSpan.FromSeconds(Math.Clamp(moved.TotalSeconds, min.TotalSeconds, max.TotalSeconds));
-                if (_cutMarkers.Where((_, i) => i != index).Any(c => (c - moved).Duration() < frame))
-                    return;
-
-                _cutMarkers[index] = moved;
-                _cutMarkers.Sort();
-            }
-
-            RebuildSegments();
-            MarkersChanged?.Invoke();
+            CurrentPosition = pos;
+            CurrentFrame = (long)(pos.TotalSeconds * _playerVM.Fps);
+            OnPropertyChanged(nameof(CurrentTimeStr));
         }
+
+        public string CurrentTimeStr => CurrentPosition.ToString(@"hh\:mm\:ss");
 
         private static void RunOnUiThread(Action action)
         {
@@ -303,29 +254,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             }
             dispatcher.BeginInvoke(action);
         }
-
-        private void RebuildSegments()
-        {
-            Segments.Clear();
-            if (_playerVM.DurationSeconds <= 0) return;
-            var startBound = _inputMarker != TimeSpan.Zero ? _inputMarker : TimeSpan.Zero;
-            var endBound = _outputMarker != TimeSpan.Zero ? _outputMarker : TimeSpan.FromSeconds(_playerVM.DurationSeconds);
-            if (endBound <= startBound) return;
-            var points = new List<TimeSpan> { startBound };
-            points.AddRange(_cutMarkers.Where(c => c > startBound && c < endBound).OrderBy(x => x));
-            points.Add(endBound);
-            points = points.Distinct().OrderBy(x => x).ToList();
-            int idx = 1;
-            for (int i = 0; i < points.Count - 1; i++)
-            {
-                if (points[i + 1] <= points[i]) continue;
-                Segments.Add(new SegmentInfo { Index = idx++, Start = points[i], End = points[i + 1], StartFrame = TimeToFrame(points[i]), EndFrame = TimeToFrame(points[i + 1]) });
-            }
-        }
-
-        private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * _playerVM.Fps);
-        private TimeSpan SnapToFrame(TimeSpan time) => TimeSpan.FromSeconds(Math.Round(time.TotalSeconds * _playerVM.Fps) / _playerVM.Fps);
-        private TimeSpan ClampToMedia(TimeSpan time) => TimeSpan.FromSeconds(Math.Clamp(time.TotalSeconds, 0, Math.Max(0, _playerVM.DurationSeconds)));
 
         // Загрузка изображений (специфичная логика, пока оставим здесь, но можно перенести в PlayerViewModel)
         private void LoadImageFile(string path)
@@ -348,10 +276,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             CurrentFrame = 0;
             TotalFrames = 1;
             OnPropertyChanged(nameof(FileFps));
-            _inputMarker = TimeSpan.Zero;
-            _outputMarker = TimeSpan.Zero;
-            _cutMarkers.Clear();
-            _undoStack.Clear();
             Segments.Clear();
             IsPlaying = false;
             StatusText = "🖼 Image loaded";

@@ -1,3 +1,75 @@
+отлично! проект собрался без ошибок. можно двигаться дальше.
+Отлично! Поздравляю с успешной сборкой проекта после рефакторинга! 🎉
+
+Текущий статус рефакторинга
+✅ Уже выделено в отдельные ViewModel:
+PlaylistViewModel – полностью работает, плейлист добавляет/удаляет файлы, авто-загрузка, навигация.
+PlayerViewModel – управление воспроизведением, метаданные, скорость, позиция.
+MarkersViewModel – маркеры (Input/Output/Cut), сегменты, Undo/Redo, синхронизация с таймлайном.
+
+⏳ Что ещё можно улучшить:
+ExportViewModel – вынести логику экспорта (сейчас в MainViewModel).
+StatusBarViewModel – строка состояния (память, кадры, статус).
+MontageViewModel – монтажный стол (пока не используется активно, но можно подготовить).
+
+План дальнейших действий
+Ближайший шаг: выделение ExportViewModel
+Зачем:
+
+Экспорт сейчас завязан на MainViewModel (методы ExportSelected, ExportAll, ExportSegment).
+
+Это нарушает принцип единственной ответственности.
+
+Выделение позволит тестировать экспорт независимо и упростит MainViewModel.
+
+Что нужно сделать:
+
+Создать ExportViewModel:
+
+Перенести методы ExportSelected, ExportAll, ExportSegment.
+
+Внедрить FFmpegProcessService, IMessenger.
+
+Подписаться на сообщение SegmentsChangedMessage (когда сегменты обновляются).
+
+Добавить прогресс-бар (сейчас он в XAML, но не обновляется).
+В ExportViewModel добавить свойства ExportProgress (0–100) и IsExporting.
+
+В MainViewModel оставить прокси-команды:
+
+csharp
+public ICommand ExportSelectedCommand => _exportVM.ExportSelectedCommand;
+public ICommand ExportAllCommand => _exportVM.ExportAllCommand;
+Зарегистрировать ExportViewModel в DI (App.xaml.cs).
+
+Дополнительные улучшения (по желанию)
+Статус-бар – вынести логику обновления кадров, памяти.
+
+Горячие клавиши – обрабатывать через команды, а не в code-behind.
+
+TimelineControl – переделать на DependencyProperty, убрать прямые вызовы из MainWindow.
+
+Обработка Drop – вынести в attached behaviors.
+
+Что вы хотите делать дальше?
+Выделить ExportViewModel (рекомендую, это завершит основную часть рефакторинга).
+
+Навести порядок в MainWindow.xaml.cs – убрать оттуда всё, что можно перенести в команды.
+
+Переделать TimelineControl на чистые привязки.
+
+Добавить недостающие сообщения для полной изоляции ViewModel.
+
+Написать простые тесты (если планируете).
+
+Пишите – я подготовлю полные коды файлов для следующего шага. Например, для ExportViewModel нужно будет показать, как он будет взаимодействовать с MarkersViewModel через SegmentsChangedMessage.
+
+
+
+
+
+
+
  Постепенный план рефакторинга (без поломки существующего кода)
 Добавить Messenger – зарегистрировать WeakReferenceMessenger.Default в DI (или использовать синглтон).
 
