@@ -146,7 +146,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 // Вручную уведомить об изменении вычисляемых свойств
                 OnPropertyChanged(nameof(FileFps));
                 OnPropertyChanged(nameof(TotalDuration));
-
+                // Отладочный вывод (можно удалить после проверки)
                 System.Diagnostics.Debug.WriteLine($"PlayerViewModel: Resolution={Resolution}, Fps={FpsStr}");
             }
             catch (Exception ex)

@@ -34,6 +34,7 @@ namespace AI_Video_ToolKit.UI
 			services.AddSingleton<MainViewModel>();
 			services.AddSingleton<PlaylistViewModel>();
 			services.AddSingleton<MarkersViewModel>();
+			services.AddSingleton<ExportViewModel>();
 
 			services.AddTransient<MainWindow>();
 			ServiceProvider = services.BuildServiceProvider();

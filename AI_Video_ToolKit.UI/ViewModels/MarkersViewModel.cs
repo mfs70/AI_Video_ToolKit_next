@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using AI_Video_ToolKit.UI.Messages;
 using AI_Video_ToolKit.UI.Services;   // <-- Добавить для PlaybackService
+using AI_Video_ToolKit.UI.ViewModels;
 
 namespace AI_Video_ToolKit.UI.ViewModels
 {
@@ -58,6 +59,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _cutMarkers.Clear();
             _undoStack.Clear();
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
         }
 
@@ -71,6 +73,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _inputMarker = pos;
             _cutMarkers.RemoveAll(c => c <= _inputMarker);
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
@@ -83,6 +86,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _outputMarker = pos;
             _cutMarkers.RemoveAll(c => c >= _outputMarker);
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
@@ -97,6 +101,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _cutMarkers.Sort();
             _undoStack.Push((MarkerActionType.CutAdd, pos, null));
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
@@ -125,6 +130,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     break;
             }
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
@@ -136,6 +142,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _undoStack.Push((MarkerActionType.CutClear, TimeSpan.Zero, new List<TimeSpan>(_cutMarkers)));
             _cutMarkers.Clear();
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
@@ -183,6 +190,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             }
 
             RebuildSegments();
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
@@ -211,7 +219,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     EndFrame = TimeToFrame(points[i + 1])
                 });
             }
+            //после перестроения сегментов добавьте отправку SegmentsChangedMessage
+            _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
         }
+
+
 
         private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * _fps);
         private TimeSpan SnapToFrame(TimeSpan time) => TimeSpan.FromSeconds(Math.Round(time.TotalSeconds * _fps) / _fps);

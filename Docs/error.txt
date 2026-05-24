@@ -1,4 +1,17 @@
 
+ // Отладочный вывод (можно удалить после проверки)
+
+            _messenger.Send(new Messages.PingMessage("Fedor ExportSelected"));
+            System.Diagnostics.Debug.WriteLine("=== ExportSelected command called ===");
+
+            _messenger.Send(new Messages.PingMessage("Fedor MarkCUT"));
+            System.Diagnostics.Debug.WriteLine("=== System MarkCUT command called ===");
+
+                        _messenger.Send(new Messages.PingMessage("Fedor ExportSelected"));
+            System.Diagnostics.Debug.WriteLine("=== ExportSelected command called ===");
+
+            System.Diagnostics.Debug.WriteLine("=== ExportAll command called ===");
+
 
 
 [RAW KEY] Key=L Handled=True Modifiers=None

@@ -22,13 +22,14 @@ namespace AI_Video_ToolKit.UI.ViewModels
     public partial class MainViewModel : ObservableObject
     {
         private readonly FFprobeService _ffprobe;
-        private readonly FFmpegProcessService _ffmpeg;
+        //        private readonly FFmpegProcessService _ffmpeg;
         private readonly PlaybackService _playback;
         private readonly FrameGrabber _grabber;
         private readonly PlayerViewModel _playerVM;
         private readonly PlaylistViewModel _playlistVM;
         private readonly IMessenger _messenger;
         private readonly MarkersViewModel _markersVM;
+        private readonly ExportViewModel _exportVM;
 
         public PlaylistViewModel PlaylistVM => _playlistVM;
 
@@ -69,19 +70,19 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private int _speedIndex = 3;
 
         // Конструктор
-        public MainViewModel(FFprobeService ffprobe, FFmpegProcessService ffmpeg,
-            PlaybackService playback, FrameGrabber grabber, PlaylistViewModel playlistVM,
-            PlayerViewModel playerVM, IMessenger messenger, MarkersViewModel markersVM)
+        public MainViewModel(FFprobeService ffprobe, PlaybackService playback, FrameGrabber grabber,
+         PlaylistViewModel playlistVM, PlayerViewModel playerVM, IMessenger messenger, MarkersViewModel markersVM,
+          ExportViewModel exportVM)
         {
             _ffprobe = ffprobe;
-            _ffmpeg = ffmpeg;
+            //            _ffmpeg = ffmpeg;
             _playback = playback;
             _grabber = grabber;
             _playlistVM = playlistVM;
             _playerVM = playerVM;
             _messenger = messenger;
             _markersVM = markersVM;
-
+            _exportVM = exportVM;
             // Подписка на изменения свойств PlayerViewModel для проброса в UI
             _playerVM.PropertyChanged += (s, e) =>
             {
@@ -164,11 +165,27 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public long TotalFrames { get => _playerVM.TotalFrames; set => _playerVM.TotalFrames = value; }
         public string TotalTimeStr => _playerVM.TotalDuration.ToString(@"hh\:mm\:ss");
         public string CurrentFile => _playerVM.CurrentFilePath;
-
         public double FileDurationSec => _playerVM.DurationSeconds;
         public double FileFps => _playerVM.Fps;
         public bool HasAudio => _playerVM.HasAudio;
         public long VideoBitrate => _playerVM.VideoBitrate;
+
+        // Прокси-свойства для прогресс-бара
+        public int ExportProgress
+        {
+            get => _exportVM.ExportProgress;
+            set => _exportVM.ExportProgress = value;
+        }
+        public bool IsExporting
+        {
+            get => _exportVM.IsBusy;
+            set => _exportVM.IsBusy = value;
+        }
+        public string ExportStatus
+        {
+            get => _exportVM.ExportStatus;
+            set => _exportVM.ExportStatus = value;
+        }
 
         // Прокси для плейлиста
         public ObservableCollection<PlaylistItem> PlaylistItems => _playlistVM.Items;
@@ -182,6 +199,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public ICommand NextCommand => _playlistVM.MoveNextCommand;
         public ICommand PreviousCommand => _playlistVM.MovePreviousCommand;
         public ICommand AddFilesCommand => _playlistVM.AddFilesCommand;
+        public ICommand ExportSelectedCommand => _exportVM.ExportSelectedCommand;
+        public ICommand ExportAllCommand => _exportVM.ExportAllCommand;
+        public ICommand CancelExportCommand => _exportVM.CancelExportCommand;
 
         // Прокси-команды плеера
         public ICommand PlayPauseCommand => _playerVM.PlayPauseCommand;
@@ -206,27 +226,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             StatusText = "▶ Preview Segment";
             await Task.CompletedTask;
         }
-
-        [RelayCommand] private async Task ExportSelected() { if (SelectedSegment != null) await ExportSegment(SelectedSegment); }
-        [RelayCommand] private async Task ExportAll() { foreach (var seg in Segments) await ExportSegment(seg); }
-        private async Task ExportSegment(SegmentInfo seg)
-        {
-            if (string.IsNullOrEmpty(CurrentFile)) return;
-            var root = Directory.GetCurrentDirectory();
-            var cutDir = Path.Combine(root, "Cut");
-            Directory.CreateDirectory(cutDir);
-            var srcName = Path.GetFileNameWithoutExtension(CurrentFile);
-            var ext = Path.GetExtension(CurrentFile);
-            var outFile = Path.Combine(cutDir, $"{seg.Index:000}_{srcName}_{seg.StartFrame}_{seg.EndFrame}{ext}");
-            var startTime = seg.Start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var bitrateKbps = Math.Max(1500, (int)((_playerVM.VideoBitrate > 0 ? _playerVM.VideoBitrate : 4_000_000) / 1000));
-            var args = $"-y -ss {startTime} -to {endTime} -i \"{CurrentFile}\" -c:v libx264 -preset veryfast -b:v {bitrateKbps}k -c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 -movflags +faststart \"{outFile}\"";
-            var ok = await _ffmpeg.RunFfmpegAsync(args);
-            if (!ok && File.Exists(outFile)) File.Delete(outFile);
-        }
-
-        // Вспомогательные методы (без дублирования загрузки файлов)
 
         //        public void UpdatePosition(TimeSpan pos)
         // {
