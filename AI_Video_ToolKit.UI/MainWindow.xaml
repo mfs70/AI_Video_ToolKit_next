@@ -816,6 +816,7 @@
                                                            HorizontalAlignment="Center"/>
                                                 <StackPanel Orientation="Horizontal">
                                                         <Button Command="{Binding ExportSelectedCommand}"
+                                                                CommandParameter="{Binding SelectedSegment}"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 Width="80"
                                                                 Margin="0,0,6,0"

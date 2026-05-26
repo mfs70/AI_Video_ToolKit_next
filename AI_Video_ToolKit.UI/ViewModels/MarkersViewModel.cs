@@ -1,4 +1,7 @@
 // Файл: ViewModels/MarkersViewModel.cs
+// Описание: Управляет маркерами (Input/Output/Cut), сегментами и Undo/Redo.
+// Отвечает за перестроение сегментов на основе маркеров и отправку уведомлений об изменениях.
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,8 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using AI_Video_ToolKit.UI.Messages;
-using AI_Video_ToolKit.UI.Services;   // <-- Добавить для PlaybackService
-using AI_Video_ToolKit.UI.ViewModels;
+using AI_Video_ToolKit.UI.Services;
 
 namespace AI_Video_ToolKit.UI.ViewModels
 {
@@ -17,19 +19,25 @@ namespace AI_Video_ToolKit.UI.ViewModels
     /// </summary>
     public partial class MarkersViewModel : ObservableObject
     {
-        private readonly IMessenger _messenger;
-        private readonly PlaybackService _playback;
+        private readonly IMessenger _messenger;      // Шина сообщений
+        private readonly PlaybackService _playback;  // Сервис воспроизведения (для получения текущей позиции)
 
-        private TimeSpan _inputMarker;
-        private TimeSpan _outputMarker;
-        private readonly List<TimeSpan> _cutMarkers = new();
+        // Текущие маркеры
+        private TimeSpan _inputMarker;   // Маркер начала (I)
+        private TimeSpan _outputMarker;  // Маркер конца (O)
+        private readonly List<TimeSpan> _cutMarkers = new();  // Маркеры разреза (C)
+
+        // Стек для Undo (сохраняет действия)
         private readonly Stack<(MarkerActionType Type, TimeSpan Value, List<TimeSpan>? CutSnapshot)> _undoStack = new();
 
-        private double _duration;
-        private double _fps;
+        // Параметры текущего видео
+        private double _duration;  // Длительность в секундах
+        private double _fps;       // Кадров в секунду
 
+        // Коллекция сегментов для отображения в UI
         public ObservableCollection<SegmentInfo> Segments { get; } = new();
 
+        // Выбранный сегмент в UI
         private SegmentInfo? _selectedSegment;
         public SegmentInfo? SelectedSegment
         {
@@ -37,19 +45,27 @@ namespace AI_Video_ToolKit.UI.ViewModels
             set => SetProperty(ref _selectedSegment, value);
         }
 
+        // Событие для уведомления об изменении маркеров (используется TimelineControl)
         public event Action? MarkersChanged;
 
+        /// <summary>
+        /// Конструктор. Получает зависимости через DI.
+        /// </summary>
         public MarkersViewModel(IMessenger messenger, PlaybackService playback)
         {
             _messenger = messenger;
             _playback = playback;
 
+            // Подписка на загрузку нового файла – сброс маркеров
             _messenger.Register<FileLoadedMessage>(this, (r, m) =>
             {
                 Reset(m.Duration, m.Fps);
             });
         }
 
+        /// <summary>
+        /// Сброс всех маркеров и сегментов при загрузке нового файла.
+        /// </summary>
         private void Reset(double duration, double fps)
         {
             _duration = duration;
@@ -63,8 +79,14 @@ namespace AI_Video_ToolKit.UI.ViewModels
             MarkersChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Текущая позиция воспроизведения (берётся из PlaybackService).
+        /// </summary>
         private TimeSpan CurrentPosition => _playback.CurrentPosition;
 
+        /// <summary>
+        /// Установка маркера начала (I) в текущую позицию.
+        /// </summary>
         [RelayCommand]
         private void MarkInput()
         {
@@ -78,6 +100,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
 
+        /// <summary>
+        /// Установка маркера конца (O) в текущую позицию.
+        /// </summary>
         [RelayCommand]
         private void MarkOutput()
         {
@@ -91,6 +116,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
 
+        /// <summary>
+        /// Установка маркера разреза (C) в текущую позицию.
+        /// </summary>
         [RelayCommand]
         private void MarkCut()
         {
@@ -106,6 +134,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
 
+        /// <summary>
+        /// Отмена последнего действия с маркерами.
+        /// </summary>
         [RelayCommand]
         private void UndoMarker()
         {
@@ -135,6 +166,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
 
+        /// <summary>
+        /// Удаление всех маркеров разреза (очистка).
+        /// </summary>
         [RelayCommand]
         private void ClearCuts()
         {
@@ -147,6 +181,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
 
+        /// <summary>
+        /// Возвращает данные для отображения на таймлайне.
+        /// </summary>
         public (double duration, TimeSpan? input, TimeSpan? output, IReadOnlyList<TimeSpan> cuts) GetTimelineData()
         {
             return (_duration,
@@ -155,6 +192,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 _cutMarkers);
         }
 
+        /// <summary>
+        /// Перемещение маркера на таймлайне (вызывается из TimelineControl).
+        /// </summary>
         public void MoveTimelineMarker(string markerType, TimeSpan? original, TimeSpan moved)
         {
             moved = ClampToMedia(SnapToFrame(moved));
@@ -195,6 +235,10 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
         }
 
+        /// <summary>
+        /// Перестраивает список сегментов на основе текущих маркеров.
+        /// Вызывается после любого изменения маркеров.
+        /// </summary>
         private void RebuildSegments()
         {
             Segments.Clear();
@@ -219,12 +263,15 @@ namespace AI_Video_ToolKit.UI.ViewModels
                     EndFrame = TimeToFrame(points[i + 1])
                 });
             }
-            //после перестроения сегментов добавьте отправку SegmentsChangedMessage
+
+            // Отправляем диагностическое сообщение в лог (будет видно в панели Logger)
+            _messenger.Send(new PingMessage($"RebuildSegments: Segments count = {Segments.Count}"));
+
+            // Уведомляем ExportViewModel об изменении сегментов (это ключевая строка!)
             _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
         }
 
-
-
+        // Вспомогательные методы для работы с кадрами
         private long TimeToFrame(TimeSpan time) => (long)(time.TotalSeconds * _fps);
         private TimeSpan SnapToFrame(TimeSpan time) => TimeSpan.FromSeconds(Math.Round(time.TotalSeconds * _fps) / _fps);
         private TimeSpan ClampToMedia(TimeSpan time) => TimeSpan.FromSeconds(Math.Clamp(time.TotalSeconds, 0, Math.Max(0, _duration)));
