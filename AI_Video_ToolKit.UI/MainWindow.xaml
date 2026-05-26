@@ -646,23 +646,23 @@
                                                    Text="▶"
                                                    FontSize="20"/>
                                 </Button>
-                                <Button x:Name="NextBtn"
-                                        Click="Next_Click"
-                                        Style="{StaticResource TransportButton}"
-                                        Grid.Column="2"
-                                        Margin="0,0,8,0"
-                                        ToolTip="Next (Ctrl+Right)">
-                                        <TextBlock Text="⏭"
-                                                   FontSize="16"/>
-                                </Button>
                                 <Button x:Name="StopBtn"
                                         Click="Stop_Click"
                                         Style="{StaticResource TransportButton}"
-                                        Grid.Column="3"
+                                        Grid.Column="2"
                                         Margin="0,0,8,0"
                                         ToolTip="Stop (Ctrl+S)">
                                         <TextBlock Text="■"
                                                    FontSize="18"/>
+                                </Button>
+                                <Button x:Name="NextBtn"
+                                        Click="Next_Click"
+                                        Style="{StaticResource TransportButton}"
+                                        Grid.Column="3"
+                                        Margin="0,0,8,0"
+                                        ToolTip="Next (Ctrl+Right)">
+                                        <TextBlock Text="⏭"
+                                                   FontSize="16"/>
                                 </Button>
                                 <Button x:Name="LoadButton"
                                         Click="LoadMultiple_Click"
@@ -817,6 +817,7 @@
                                                 <StackPanel Orientation="Horizontal">
                                                         <Button Command="{Binding ExportSelectedCommand}"
                                                                 CommandParameter="{Binding SelectedSegment}"
+                                                                IsEnabled="{Binding CanExport}"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 Width="80"
                                                                 Margin="0,0,6,0"
@@ -828,7 +829,9 @@
                                                                                    FontSize="11"/>
                                                                 </StackPanel>
                                                         </Button>
+
                                                         <Button Command="{Binding ExportAllCommand}"
+                                                                IsEnabled="{Binding CanExport}"
                                                                 Style="{StaticResource SecondaryButton}"
                                                                 Width="80"
                                                                 ToolTip="Export all segments">

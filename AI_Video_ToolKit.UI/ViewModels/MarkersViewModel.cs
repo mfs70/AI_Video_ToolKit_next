@@ -42,7 +42,13 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public SegmentInfo? SelectedSegment
         {
             get => _selectedSegment;
-            set => SetProperty(ref _selectedSegment, value);
+            set // => SetProperty(ref _selectedSegment, value);
+            {
+                if (SetProperty(ref _selectedSegment, value))
+                {
+                    _messenger.Send(new PingMessage($"SelectedSegment changed to: {value?.ToString() ?? "null"}"));
+                }
+            }
         }
 
         // Событие для уведомления об изменении маркеров (используется TimelineControl)

@@ -22,7 +22,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
     public partial class MainViewModel : ObservableObject
     {
         private readonly FFprobeService _ffprobe;
-        //        private readonly FFmpegProcessService _ffmpeg;
         private readonly PlaybackService _playback;
         private readonly FrameGrabber _grabber;
         private readonly PlayerViewModel _playerVM;
@@ -33,7 +32,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         public PlaylistViewModel PlaylistVM => _playlistVM;
 
-        // Состояние
         private string _statusText = "✅ Ready";
         public string StatusText
         {
@@ -41,9 +39,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
             set => SetProperty(ref _statusText, value);
         }
 
-        // Маркеры и сегменты
-
-        //        public ObservableCollection<SegmentInfo> Segments { get; } = new();
+        // Прокси для маркеров
         public ObservableCollection<SegmentInfo> Segments => _markersVM.Segments;
         public SegmentInfo? SelectedSegment
         {
@@ -65,17 +61,17 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         public ObservableCollection<MontageItem> MontageItems { get; } = new();
 
-        // Скорость
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex = 3;
 
-        // Конструктор
+        // Прокси для доступности экспорта (добавлено)
+        public bool CanExport => _exportVM.CanExport;
+
         public MainViewModel(FFprobeService ffprobe, PlaybackService playback, FrameGrabber grabber,
-         PlaylistViewModel playlistVM, PlayerViewModel playerVM, IMessenger messenger, MarkersViewModel markersVM,
-          ExportViewModel exportVM)
+            PlaylistViewModel playlistVM, PlayerViewModel playerVM, IMessenger messenger,
+            MarkersViewModel markersVM, ExportViewModel exportVM)
         {
             _ffprobe = ffprobe;
-            //            _ffmpeg = ffmpeg;
             _playback = playback;
             _grabber = grabber;
             _playlistVM = playlistVM;
@@ -83,63 +79,51 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger = messenger;
             _markersVM = markersVM;
             _exportVM = exportVM;
-            // Подписка на изменения свойств PlayerViewModel для проброса в UI
-            _playerVM.PropertyChanged += (s, e) =>
-            {
-                // Проксируем все изменения свойств из PlayerViewModel в MainViewModel
-                OnPropertyChanged(e.PropertyName);
-            };
 
-            // Подписка на изменения свойств PlaylistViewModel (для SelectedItem)
+            _playerVM.PropertyChanged += (s, e) => OnPropertyChanged(e.PropertyName);
+
             _playlistVM.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(PlaylistViewModel.SelectedItem))
                     OnPropertyChanged(nameof(SelectedPlaylistItem));
-                // Можно добавить другие проксируемые свойства, если потребуется
             };
 
-            //подписка на  событие MarkersChanged для проброса в UI (если нужно обновлять что-то в UI, например, TimelineControl)
-            //  и перенаправлять событие
+            _markersVM.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(MarkersViewModel.SelectedSegment))
+                    OnPropertyChanged(nameof(SelectedSegment));
+            };
             _markersVM.MarkersChanged += () => MarkersChanged?.Invoke();
 
-            _playback.OnPositionChanged += pos =>
+            // Подписка на изменения CanExport из ExportViewModel
+            _exportVM.PropertyChanged += (s, e) =>
             {
-                RunOnUiThread(() => UpdatePosition(pos));
-            };
-            _playback.OnPlaybackEnded += () =>
-            {
-                RunOnUiThread(() =>
-                {
-                    IsPlaying = false;
-                    StatusText = "⏸ Paused";
-                });
+                if (e.PropertyName == nameof(ExportViewModel.CanExport))
+                    OnPropertyChanged(nameof(CanExport));
             };
 
-            // Подписываемся на сообщение о загрузке файла, чтобы синхронизировать маркеры и сброс состояния
+            _playback.OnPositionChanged += pos => RunOnUiThread(() => UpdatePosition(pos));
+            _playback.OnPlaybackEnded += () => RunOnUiThread(() =>
+            {
+                IsPlaying = false;
+                StatusText = "⏸ Paused";
+            });
+
             _messenger.Register<FileLoadedMessage>(this, (r, m) =>
             {
-                // Сброс маркеров, когда загружен новый файл
                 MarkersChanged?.Invoke();
                 StatusText = "▶ Playing";
             });
-
-            // Регистрация на сообщение для изображений (опционально)
-            _messenger.Register<ImageLoadedMessage>(this, (r, m) =>
-            {
-                // Здесь можно загрузить изображение в Preview, но пока оставим как есть
-                StatusText = "🖼 Image loaded";
-            });
+            _messenger.Register<ImageLoadedMessage>(this, (r, m) => StatusText = "🖼 Image loaded");
         }
 
-        // Временный прокси-метод для совместимости со старым кодом в MainWindow.xaml.cs
         public Task LoadFile(string path)
         {
             _messenger.Send(new LoadFileMessage(path));
             return Task.CompletedTask;
         }
 
-
-        // Прокси-свойства (напрямую из PlayerViewModel)
+        // Прокси-свойства PlayerViewModel
         public bool IsPlaying { get => _playerVM.IsPlaying; set => _playerVM.IsPlaying = value; }
         public TimeSpan CurrentPosition { get => _playerVM.CurrentPosition; set => _playerVM.CurrentPosition = value; }
         public double Speed => _playerVM.Speed;
@@ -170,7 +154,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public bool HasAudio => _playerVM.HasAudio;
         public long VideoBitrate => _playerVM.VideoBitrate;
 
-        // Прокси-свойства для прогресс-бара
+        // Прокси для экспорта
         public int ExportProgress
         {
             get => _exportVM.ExportProgress;
@@ -208,14 +192,10 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public ICommand StopCommand => _playerVM.StopCommand;
         public ICommand SeekCommand => _playerVM.SeekCommand;
 
-        // Для совместимости со старыми обработчиками в MainWindow.xaml.cs
         public void Next() => NextCommand.Execute(null);
         public void Previous() => PreviousCommand.Execute(null);
         public bool AddToPlaylist(string path) => _playlistVM.AddToPlaylist(path);
 
-        // Маркеры
-
-        // Предпросмотр и экспорт
         [RelayCommand]
         private async Task PreviewSegment()
         {
@@ -226,13 +206,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             StatusText = "▶ Preview Segment";
             await Task.CompletedTask;
         }
-
-        //        public void UpdatePosition(TimeSpan pos)
-        // {
-        //  CurrentPosition = pos;
-        //  CurrentFrame = TimeToFrame(pos);
-        //  OnPropertyChanged(nameof(CurrentTimeStr));
-        // }
 
         public void UpdatePosition(TimeSpan pos)
         {
@@ -254,7 +227,6 @@ namespace AI_Video_ToolKit.UI.ViewModels
             dispatcher.BeginInvoke(action);
         }
 
-        // Загрузка изображений (специфичная логика, пока оставим здесь, но можно перенести в PlayerViewModel)
         private void LoadImageFile(string path)
         {
             var bitmap = new BitmapImage();
