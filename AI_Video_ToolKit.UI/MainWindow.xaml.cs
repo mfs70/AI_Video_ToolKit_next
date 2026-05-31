@@ -125,7 +125,7 @@ namespace AI_Video_ToolKit.UI
 
         private async Task SeekToAsync(TimeSpan position)
         {
-            _playback.Stop();
+            _playback.Stop(resetPosition: false);
             UpdatePositionUi(position, updatePlaybackService: true);
             if ((DateTime.Now - _lastTimelineSeekLog).TotalMilliseconds >= 250)
             {
@@ -336,8 +336,27 @@ namespace AI_Video_ToolKit.UI
             if (e.Key == Key.A) { e.Handled = true; return; }
             if (e.Key == Key.V) { e.Handled = true; return; }
             if (e.Key == Key.M) { e.Handled = true; return; }
-            if (e.Key == Key.Right) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? 10 : 1); e.Handled = true; return; }
-            if (e.Key == Key.Left) { Step(Keyboard.Modifiers == ModifierKeys.Shift ? -10 : -1); e.Handled = true; return; }
+            if (e.Key == Key.Right || e.Key == Key.Left)
+            {
+                // Window preview keys are raised before TimelineControl gets the event.
+                // Give a selected timeline marker priority; otherwise arrows step playback.
+                if (Timeline.TryMoveSelectedMarkerByKey(e.Key, Keyboard.Modifiers))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (Timeline.IsPlayheadSelected && Timeline.TryMovePlayheadByKey(e.Key, Keyboard.Modifiers))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+                Step(e.Key == Key.Right ? step : -step);
+                e.Handled = true;
+                return;
+            }
         }
 
         private void IncreaseSpeed()

@@ -91,15 +91,17 @@ namespace AI_Video_ToolKit.UI.Services
 		
 //        public void Stop() { _player.Stop(); _isPlaying = false; _hasActiveSession = false; }
 		
-		public void Stop()
+		public void Stop(bool resetPosition = true)
 		{
 			_player.Stop();
 
 			_isPlaying = false;
 			_hasActiveSession = false;
 
-			_current = TimeSpan.Zero;
+			if (!resetPosition)
+				return;
 
+			_current = TimeSpan.Zero;
 			OnPositionChanged?.Invoke(TimeSpan.Zero);
 		}
 		

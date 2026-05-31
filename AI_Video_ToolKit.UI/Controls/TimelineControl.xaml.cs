@@ -20,6 +20,7 @@ namespace AI_Video_ToolKit.UI.Controls
         private readonly Brush _selectedBrush = Brushes.Gold;
         private readonly Brush _inputBrush = Brushes.LimeGreen;
         private readonly Brush _outputBrush = Brushes.IndianRed;
+        private const double MarkerHitRadiusPixels = 10;
 
         private double _duration;
         private double _fps = 25;
@@ -34,6 +35,7 @@ namespace AI_Video_ToolKit.UI.Controls
         private MarkerSelection _dragType = MarkerSelection.None;
         private TimeSpan? _dragOriginalTime;
         private bool _isPlayheadDragging;
+        private bool _isPlayheadSelected;
 
         public event Action<TimeSpan>? OnChanged;
         public event Action<MarkerSelection, TimeSpan?, TimeSpan>? MarkerMoved;
@@ -53,12 +55,17 @@ namespace AI_Video_ToolKit.UI.Controls
                 FlushPendingSliderChange();
             };
             Slider.LostMouseCapture += (_, _) => _isUserSliderInteraction = false;
-            Canvas.SetTop(InputMarker, 2);
-            Canvas.SetTop(OutputMarker, 2);
+            Canvas.SetTop(InputMarkerLabel, 0);
+            Canvas.SetTop(OutputMarkerLabel, 0);
+            Canvas.SetTop(InputMarker, 16);
+            Canvas.SetTop(OutputMarker, 16);
+            Canvas.SetTop(PlayheadLine, 16);
         }
 
         public MarkerSelection SelectedMarkerType => _selectedType;
         public TimeSpan? SelectedMarkerTime => _selectedMarkerTime;
+        public bool HasSelectedMarker => _selectedType != MarkerSelection.None && _selectedMarkerTime.HasValue;
+        public bool IsPlayheadSelected => _isPlayheadSelected;
 
         public void SetDuration(double duration)
         {
@@ -86,11 +93,13 @@ namespace AI_Video_ToolKit.UI.Controls
             if (totalFrames <= 0)
             {
                 FrameCursor.Visibility = Visibility.Collapsed;
+                PlayheadLine.Visibility = Visibility.Collapsed;
                 return;
             }
 
             FrameCursor.Visibility = Visibility.Visible;
-            FrameText.Text = $"{frame}/{totalFrames}";
+            PlayheadLine.Visibility = Visibility.Visible;
+            FrameText.Text = frame.ToString();
             UpdateFrameCursorLayout();
         }
 
@@ -100,7 +109,9 @@ namespace AI_Video_ToolKit.UI.Controls
             _outputMarker = output;
 
             InputMarker.Visibility = input.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            InputMarkerLabel.Visibility = input.HasValue ? Visibility.Visible : Visibility.Collapsed;
             OutputMarker.Visibility = output.HasValue ? Visibility.Visible : Visibility.Collapsed;
+            OutputMarkerLabel.Visibility = output.HasValue ? Visibility.Visible : Visibility.Collapsed;
             EnsureCutMarkerCount(cuts.Count);
 
             var orderedCuts = cuts.OrderBy(x => x).ToArray();
@@ -109,6 +120,7 @@ namespace AI_Video_ToolKit.UI.Controls
                 var visual = _cutMarkers[i];
                 visual.Time = i < orderedCuts.Length ? orderedCuts[i] : null;
                 visual.Shape.Visibility = visual.Time.HasValue ? Visibility.Visible : Visibility.Collapsed;
+                visual.Label.Visibility = visual.Time.HasValue ? Visibility.Visible : Visibility.Collapsed;
             }
 
             UpdateMarkerLayout();
@@ -162,16 +174,19 @@ namespace AI_Video_ToolKit.UI.Controls
             Focus();
             var position = e.GetPosition(MarkerCanvas);
             var time = XToTime(position.X);
-            SelectNearestMarker(time);
+            SelectNearestMarkerAtX(position.X);
 
             if (_selectedType == MarkerSelection.None)
             {
+                _isPlayheadSelected = true;
+                ApplySelectionVisualState();
                 _isPlayheadDragging = true;
                 QueuePlayheadSeek(time);
                 MarkerCanvas.CaptureMouse();
                 e.Handled = true;
                 return;
             }
+            _isPlayheadSelected = false;
             _dragType = _selectedType;
             _dragOriginalTime = _selectedMarkerTime;
             MarkerCanvas.CaptureMouse();
@@ -224,23 +239,56 @@ namespace AI_Video_ToolKit.UI.Controls
 
         private void UserControl_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (_selectedType == MarkerSelection.None || !_selectedMarkerTime.HasValue) return;
-            var frameStep = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+            if (e.Key == Key.Escape)
+            {
+                ClearSelection();
+                e.Handled = true;
+                return;
+            }
+
+            if (_isPlayheadSelected && TryMovePlayheadByKey(e.Key, Keyboard.Modifiers))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (!HasSelectedMarker) return;
+            if (TryMoveSelectedMarkerByKey(e.Key, Keyboard.Modifiers))
+                e.Handled = true;
+        }
+
+        public bool TryMovePlayheadByKey(Key key, ModifierKeys modifiers)
+        {
+            if (key != Key.Left && key != Key.Right) return false;
+
+            _isPlayheadSelected = true;
+            _selectedType = MarkerSelection.None;
+            _selectedMarkerTime = null;
+            ApplySelectionVisualState();
+
+            var frameStep = modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
             var delta = TimeSpan.FromSeconds(frameStep / _fps);
-            if (e.Key == Key.Left)
-            {
-                var original = _selectedMarkerTime;
-                MoveSelectedMarker(_selectedMarkerTime.Value - delta);
-                MarkerMoved?.Invoke(_selectedType, original, _selectedMarkerTime.Value);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Right)
-            {
-                var original = _selectedMarkerTime;
-                MoveSelectedMarker(_selectedMarkerTime.Value + delta);
-                MarkerMoved?.Invoke(_selectedType, original, _selectedMarkerTime.Value);
-                e.Handled = true;
-            }
+            var current = TimeSpan.FromSeconds(Slider.Value);
+            var target = key == Key.Left ? current - delta : current + delta;
+            QueuePlayheadSeek(ClampToDuration(SnapToFrame(target)));
+            FlushPendingSliderChange();
+            return true;
+        }
+
+        public bool TryMoveSelectedMarkerByKey(Key key, ModifierKeys modifiers)
+        {
+            if (!HasSelectedMarker) return false;
+            if (key != Key.Left && key != Key.Right) return false;
+
+            var frameStep = modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+
+            var delta = TimeSpan.FromSeconds(frameStep / _fps);
+            var original = _selectedMarkerTime.GetValueOrDefault();
+            var target = key == Key.Left ? original - delta : original + delta;
+
+            MoveSelectedMarker(target);
+            MarkerMoved?.Invoke(_selectedType, original, _selectedMarkerTime.GetValueOrDefault(original));
+            return true;
         }
 
         private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateMarkerLayout();
@@ -252,47 +300,72 @@ namespace AI_Video_ToolKit.UI.Controls
                 var shape = new Rectangle
                 {
                     Width = 2,
-                    Height = 18,
+                    Height = 22,
                     Fill = _cutBrush,
                     Cursor = Cursors.SizeWE,
                     Visibility = Visibility.Collapsed
                 };
-                Canvas.SetTop(shape, 2);
+                var label = new TextBlock
+                {
+                    Foreground = _cutBrush,
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold,
+                    Visibility = Visibility.Collapsed
+                };
+                Canvas.SetTop(label, 0);
+                Canvas.SetTop(shape, 16);
+                CutMarkerLayer.Children.Add(label);
                 CutMarkerLayer.Children.Add(shape);
-                _cutMarkers.Add(new CutMarkerVisual(shape));
+                _cutMarkers.Add(new CutMarkerVisual(shape, label));
             }
         }
 
-        private void SelectNearestMarker(TimeSpan click)
+        private void SelectNearestMarkerAtX(double clickX)
         {
             _selectedType = MarkerSelection.None;
             _selectedMarkerTime = null;
-            var threshold = TimeSpan.FromSeconds(Math.Max(1 / _fps, 0.2));
+            _isPlayheadSelected = false;
 
-            if (_inputMarker.HasValue && (_inputMarker.Value - click).Duration() <= threshold)
+            var nearestType = MarkerSelection.None;
+            TimeSpan? nearestTime = null;
+            var nearestDistance = double.MaxValue;
+
+            void Consider(MarkerSelection type, TimeSpan? time)
             {
-                _selectedType = MarkerSelection.Input;
-                _selectedMarkerTime = _inputMarker;
+                if (!time.HasValue) return;
+                var distance = Math.Abs(TimeToX(time.Value) - clickX);
+                if (distance >= nearestDistance) return;
+                nearestDistance = distance;
+                nearestType = type;
+                nearestTime = time;
             }
-            else if (_outputMarker.HasValue && (_outputMarker.Value - click).Duration() <= threshold)
+
+            Consider(MarkerSelection.Input, _inputMarker);
+            Consider(MarkerSelection.Output, _outputMarker);
+            foreach (var marker in _cutMarkers.Where(x => x.Time.HasValue))
+                Consider(MarkerSelection.Cut, marker.Time);
+
+            if (nearestTime.HasValue && nearestDistance <= MarkerHitRadiusPixels)
             {
-                _selectedType = MarkerSelection.Output;
-                _selectedMarkerTime = _outputMarker;
+                _selectedType = nearestType;
+                _selectedMarkerTime = nearestTime;
             }
             else
             {
-                var cut = _cutMarkers
-                    .Where(x => x.Time.HasValue)
-                    .Select(x => x.Time!.Value)
-                    .OrderBy(x => (x - click).Duration())
-                    .FirstOrDefault();
-                if (cut != default && (cut - click).Duration() <= threshold)
-                {
-                    _selectedType = MarkerSelection.Cut;
-                    _selectedMarkerTime = cut;
-                }
+                _isPlayheadSelected = true;
             }
 
+            ApplySelectionVisualState();
+        }
+
+        public void ClearSelection()
+        {
+            _selectedType = MarkerSelection.None;
+            _selectedMarkerTime = null;
+            _dragType = MarkerSelection.None;
+            _dragOriginalTime = null;
+            _isPlayheadSelected = false;
+            _isPlayheadDragging = false;
             ApplySelectionVisualState();
         }
 
@@ -339,37 +412,67 @@ namespace AI_Video_ToolKit.UI.Controls
         private void UpdateMarkerLayout()
         {
             if (_duration <= 0) return;
-            if (_inputMarker.HasValue) Canvas.SetLeft(InputMarker, TimeToX(_inputMarker.Value));
-            if (_outputMarker.HasValue) Canvas.SetLeft(OutputMarker, TimeToX(_outputMarker.Value));
+            if (_inputMarker.HasValue)
+                SetMarkerLayout(InputMarker, InputMarkerLabel, _inputMarker.Value);
+            if (_outputMarker.HasValue)
+                SetMarkerLayout(OutputMarker, OutputMarkerLabel, _outputMarker.Value);
             foreach (var marker in _cutMarkers.Where(x => x.Time.HasValue))
-                Canvas.SetLeft(marker.Shape, TimeToX(marker.Time!.Value));
+                SetMarkerLayout(marker.Shape, marker.Label, marker.Time!.Value);
             UpdateFrameCursorLayout();
+        }
+
+        private void SetMarkerLayout(FrameworkElement marker, TextBlock label, TimeSpan time)
+        {
+            var x = TimeToX(time);
+            Canvas.SetLeft(marker, Math.Max(0, x - marker.Width / 2));
+
+            label.Text = TimeToFrame(time).ToString();
+            label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var labelWidth = label.DesiredSize.Width > 1 ? label.DesiredSize.Width : 24;
+            Canvas.SetLeft(label, Math.Clamp(x - labelWidth / 2, 0, Math.Max(0, MarkerCanvas.ActualWidth - labelWidth)));
         }
 
         private void UpdateFrameCursorLayout()
         {
             if (FrameCursor.Visibility != Visibility.Visible) return;
             var x = TimeToX(TimeSpan.FromSeconds(Slider.Value));
+            Canvas.SetLeft(PlayheadLine, Math.Clamp(x - PlayheadLine.Width / 2, 0, Math.Max(0, MarkerCanvas.ActualWidth - PlayheadLine.Width)));
             var cursorWidth = FrameCursor.ActualWidth > 1 ? FrameCursor.ActualWidth : FrameCursor.MinWidth;
             var maxLeft = Math.Max(0, MarkerCanvas.ActualWidth - cursorWidth);
             Canvas.SetLeft(FrameCursor, Math.Clamp(x - cursorWidth / 2, 0, maxLeft));
-            Canvas.SetTop(FrameCursor, 0);
+            Canvas.SetTop(FrameCursor, 38 - FrameCursor.ActualHeight / 2);
         }
 
         private void ApplySelectionVisualState()
         {
             InputMarker.Fill = _selectedType == MarkerSelection.Input ? _selectedBrush : _inputBrush;
+            InputMarkerLabel.Foreground = _selectedType == MarkerSelection.Input ? _selectedBrush : _inputBrush;
             OutputMarker.Fill = _selectedType == MarkerSelection.Output ? _selectedBrush : _outputBrush;
+            OutputMarkerLabel.Foreground = _selectedType == MarkerSelection.Output ? _selectedBrush : _outputBrush;
+            PlayheadLine.Fill = _isPlayheadSelected ? _selectedBrush : Brushes.LightGreen;
+            FrameCursor.BorderBrush = _isPlayheadSelected ? _selectedBrush : Brushes.LightGreen;
+            FrameText.Foreground = _isPlayheadSelected ? _selectedBrush : Brushes.LightGreen;
             foreach (var marker in _cutMarkers)
-                marker.Shape.Fill = marker.Time.HasValue && _selectedType == MarkerSelection.Cut && marker.Time == _selectedMarkerTime
+            {
+                var brush = marker.Time.HasValue && _selectedType == MarkerSelection.Cut && marker.Time == _selectedMarkerTime
                     ? _selectedBrush
                     : _cutBrush;
+                marker.Shape.Fill = brush;
+                marker.Label.Foreground = brush;
+            }
         }
 
         private TimeSpan SnapToFrame(TimeSpan time)
         {
             var frame = 1 / _fps;
             return TimeSpan.FromSeconds(Math.Round(time.TotalSeconds / frame) * frame);
+        }
+
+        private long TimeToFrame(TimeSpan time) => (long)Math.Round(time.TotalSeconds * _fps);
+
+        private TimeSpan ClampToDuration(TimeSpan time)
+        {
+            return TimeSpan.FromSeconds(Math.Clamp(time.TotalSeconds, 0, Math.Max(0, _duration)));
         }
 
         private double TimeToX(TimeSpan time)
@@ -386,8 +489,14 @@ namespace AI_Video_ToolKit.UI.Controls
 
         private sealed class CutMarkerVisual
         {
-            public CutMarkerVisual(Rectangle shape) => Shape = shape;
+            public CutMarkerVisual(Rectangle shape, TextBlock label)
+            {
+                Shape = shape;
+                Label = label;
+            }
+
             public Rectangle Shape { get; }
+            public TextBlock Label { get; }
             public TimeSpan? Time { get; set; }
         }
     }

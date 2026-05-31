@@ -39,6 +39,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         /// </summary>
         public bool CanExport => !IsBusy && _segments.Any();
 
+        partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanExport));
+
         public ExportViewModel(FFmpegProcessService ffmpeg, IMessenger messenger)
         {
             _ffmpeg = ffmpeg;
@@ -129,7 +131,15 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
                 ExportStatus = $"📤 Экспорт {i + 1} / {totalSegments}: {Path.GetFileName(outFile)}";
 
-                var success = await ExportSingleSegment(seg, outFile, _cts.Token);
+                var segmentIndex = i;
+                var segmentProgress = new Progress<double>(value =>
+                {
+                    // Smooth export progress: completed segments plus current FFmpeg progress.
+                    var total = (segmentIndex + Math.Clamp(value, 0, 1)) * 100.0 / totalSegments;
+                    ExportProgress = (int)Math.Clamp(total, 0, 100);
+                });
+
+                var success = await ExportSingleSegment(seg, outFile, _cts.Token, segmentProgress);
                 if (success) successfulExports++;
 
                 ExportProgress = (int)((i + 1) * 100.0 / totalSegments);
@@ -164,7 +174,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
             OnPropertyChanged(nameof(CanExport));
         }
 
-        private async Task<bool> ExportSingleSegment(SegmentInfo seg, string outFile, CancellationToken token)
+        private async Task<bool> ExportSingleSegment(
+            SegmentInfo seg,
+            string outFile,
+            CancellationToken token,
+            IProgress<double> progress)
         {
             try
             {
@@ -172,12 +186,12 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 var endTime = seg.End.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 var bitrateKbps = Math.Max(1500, (int)((_videoBitrate > 0 ? _videoBitrate : 4_000_000) / 1000));
 
-                var args = $"-y -ss {startTime} -to {endTime} -i \"{_currentFilePath}\" " +
+                var args = $"-y -hide_banner -nostats -progress pipe:1 -ss {startTime} -to {endTime} -i \"{_currentFilePath}\" " +
                           $"-c:v libx264 -preset veryfast -b:v {bitrateKbps}k " +
                           $"-c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 " +
                           $"-movflags +faststart \"{outFile}\"";
 
-                var success = await _ffmpeg.RunFfmpegAsync(args);
+                var success = await _ffmpeg.RunFfmpegAsync(args, seg.Duration, progress, token);
                 if (!success && File.Exists(outFile)) File.Delete(outFile);
                 return success;
             }

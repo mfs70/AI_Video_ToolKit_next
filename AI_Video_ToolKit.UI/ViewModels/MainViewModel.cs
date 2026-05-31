@@ -98,8 +98,18 @@ namespace AI_Video_ToolKit.UI.ViewModels
             // Подписка на изменения CanExport из ExportViewModel
             _exportVM.PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName == nameof(ExportViewModel.CanExport))
+                if (e.PropertyName == nameof(ExportViewModel.CanExport) ||
+                    e.PropertyName == nameof(ExportViewModel.IsBusy))
+                {
                     OnPropertyChanged(nameof(CanExport));
+                    OnPropertyChanged(nameof(IsExporting));
+                }
+
+                if (e.PropertyName == nameof(ExportViewModel.ExportProgress))
+                    OnPropertyChanged(nameof(ExportProgress));
+
+                if (e.PropertyName == nameof(ExportViewModel.ExportStatus))
+                    OnPropertyChanged(nameof(ExportStatus));
             };
 
             _playback.OnPositionChanged += pos => RunOnUiThread(() => UpdatePosition(pos));
