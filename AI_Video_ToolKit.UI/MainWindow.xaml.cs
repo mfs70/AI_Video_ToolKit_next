@@ -40,6 +40,13 @@ namespace AI_Video_ToolKit.UI
             {
                 Log($"Messenger test: {m.Text}");
             });
+            _messenger.Register<LogMessage>(this, (_, m) => Dispatcher.BeginInvoke(() => Log(m.Text)));
+            _messenger.Register<ExportFinishedMessage>(this, (_, m) => Dispatcher.BeginInvoke(() =>
+            {
+                Log(m.Success
+                    ? $"Export finished. Result: {m.ResultPath}"
+                    : "Export finished with errors.");
+            }));
 
 
             _playback.OnLog += message => Dispatcher.BeginInvoke(() => Log(message));
@@ -312,6 +319,15 @@ namespace AI_Video_ToolKit.UI
         private void MontageTable_DragOver(object sender, DragEventArgs e) { e.Effects = DragDropEffects.None; e.Handled = true; }
         private void MontageList_Drop(object sender, DragEventArgs e) { e.Handled = true; }
         private void MontageList_DragOver(object sender, DragEventArgs e) { e.Effects = DragDropEffects.None; e.Handled = true; }
+
+        private async void MergeSelectedMontage_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = MontageList.SelectedItems
+                .OfType<MontageItem>()
+                .ToList();
+            Log($"Action clicked: merge selected ({selected.Count}).");
+            await _viewModel.MergeSelectedMontageItems(selected);
+        }
 
         // ==================== Горячие клавиши ====================
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

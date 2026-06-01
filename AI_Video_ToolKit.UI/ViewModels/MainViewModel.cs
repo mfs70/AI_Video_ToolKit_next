@@ -22,6 +22,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
     public partial class MainViewModel : ObservableObject
     {
         private readonly FFprobeService _ffprobe;
+        private readonly FFmpegProcessService _ffmpeg;
         private readonly PlaybackService _playback;
         private readonly FrameGrabber _grabber;
         private readonly PlayerViewModel _playerVM;
@@ -60,6 +61,7 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public event Action<BitmapImage>? ImageLoaded;
 
         public ObservableCollection<MontageItem> MontageItems { get; } = new();
+        public MontageItem? SelectedMontageItem { get; set; }
 
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex = 3;
@@ -67,11 +69,12 @@ namespace AI_Video_ToolKit.UI.ViewModels
         // Прокси для доступности экспорта (добавлено)
         public bool CanExport => _exportVM.CanExport;
 
-        public MainViewModel(FFprobeService ffprobe, PlaybackService playback, FrameGrabber grabber,
+        public MainViewModel(FFprobeService ffprobe, FFmpegProcessService ffmpeg, PlaybackService playback, FrameGrabber grabber,
             PlaylistViewModel playlistVM, PlayerViewModel playerVM, IMessenger messenger,
             MarkersViewModel markersVM, ExportViewModel exportVM)
         {
             _ffprobe = ffprobe;
+            _ffmpeg = ffmpeg;
             _playback = playback;
             _grabber = grabber;
             _playlistVM = playlistVM;
@@ -125,6 +128,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 StatusText = "▶ Playing";
             });
             _messenger.Register<ImageLoadedMessage>(this, (r, m) => StatusText = "🖼 Image loaded");
+            _messenger.Register<ExportedMediaMessage>(this, (_, message) =>
+            {
+                AddMontageItem(message.FilePath, message.Duration);
+                StatusText = $"Added to montage: {Path.GetFileName(message.FilePath)}";
+            });
         }
 
         public Task LoadFile(string path)
@@ -205,6 +213,117 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public void Next() => NextCommand.Execute(null);
         public void Previous() => PreviousCommand.Execute(null);
         public bool AddToPlaylist(string path) => _playlistVM.AddToPlaylist(path);
+
+        [RelayCommand]
+        private async Task ExtractFrames()
+        {
+            _messenger.Send(new LogMessage("Action clicked: extract frames."));
+            if (string.IsNullOrEmpty(CurrentFile))
+            {
+                StatusText = "No loaded video for frame extraction";
+                _messenger.Send(new LogMessage("Extract frames skipped: no loaded video."));
+                return;
+            }
+
+            var framesDir = Path.Combine(Directory.GetCurrentDirectory(), "Frames");
+            Directory.CreateDirectory(framesDir);
+            StatusText = "Extracting frames...";
+            var outputPattern = Path.Combine(framesDir, "frame_%06d.png");
+            var args = $"-y -hide_banner -i \"{CurrentFile}\" -vsync 0 \"{outputPattern}\"";
+            var success = await _ffmpeg.RunFfmpegAsync(args);
+            StatusText = success ? $"Frames saved: {framesDir}" : "Frame extraction failed";
+            _messenger.Send(new LogMessage(success
+                ? $"Extract frames complete: {framesDir}"
+                : "Extract frames failed."));
+        }
+
+        [RelayCommand]
+        private async Task BuildVideoFromFrames()
+        {
+            _messenger.Send(new LogMessage("Action clicked: build video from Frames."));
+            var root = Directory.GetCurrentDirectory();
+            var framesDir = Path.Combine(root, "Frames");
+            if (!Directory.Exists(framesDir) || !Directory.EnumerateFiles(framesDir, "frame_*.png").Any())
+            {
+                StatusText = "Frames folder is empty";
+                _messenger.Send(new LogMessage("Build video skipped: Frames folder is empty."));
+                return;
+            }
+
+            var outputDir = Path.Combine(root, "Output");
+            Directory.CreateDirectory(outputDir);
+            var fps = FileFps > 0 ? FileFps : 25;
+            var outFile = Path.Combine(outputDir, $"frames_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
+            StatusText = "Building video from frames...";
+            var inputPattern = Path.Combine(framesDir, "frame_%06d.png");
+            var args = $"-y -hide_banner -framerate {fps.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
+                       $"-i \"{inputPattern}\" -c:v libx264 -pix_fmt yuv420p \"{outFile}\"";
+            var success = await _ffmpeg.RunFfmpegAsync(args);
+            if (success)
+                AddMontageItem(outFile, TimeSpan.Zero);
+
+            StatusText = success ? $"Video built: {Path.GetFileName(outFile)}" : "Build from frames failed";
+            _messenger.Send(new LogMessage(success
+                ? $"Build from frames complete: {outFile}"
+                : "Build from frames failed."));
+        }
+
+        [RelayCommand]
+        private async Task MergeMontage()
+        {
+            _messenger.Send(new LogMessage("Action clicked: merge all montage clips."));
+            await MergeMontageItems(MontageItems.ToList(), "montage_all");
+        }
+
+        public async Task MergeSelectedMontageItems(IEnumerable<MontageItem> selectedItems)
+        {
+            _messenger.Send(new LogMessage("Action clicked: merge selected montage clips."));
+            await MergeMontageItems(selectedItems.ToList(), "montage_selected");
+        }
+
+        private async Task MergeMontageItems(IReadOnlyList<MontageItem> items, string namePrefix)
+        {
+            if (items.Count == 0)
+            {
+                StatusText = "No montage clips selected";
+                _messenger.Send(new LogMessage("Merge skipped: no montage clips."));
+                return;
+            }
+
+            var root = Directory.GetCurrentDirectory();
+            var outputDir = Path.Combine(root, "Output");
+            Directory.CreateDirectory(outputDir);
+            var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var listFile = Path.Combine(outputDir, $"{namePrefix}_{stamp}.txt");
+            var outFile = Path.Combine(outputDir, $"{namePrefix}_{stamp}.mp4");
+            File.WriteAllLines(listFile, items.Select(x => $"file '{EscapeConcatPath(x.FilePath)}'"));
+
+            StatusText = $"Merging {items.Count} clip(s)...";
+            var args = $"-y -hide_banner -f concat -safe 0 -i \"{listFile}\" -c copy \"{outFile}\"";
+            var success = await _ffmpeg.RunFfmpegAsync(args);
+            if (success)
+                AddMontageItem(outFile, TimeSpan.FromTicks(items.Sum(x => x.Duration.Ticks)));
+
+            StatusText = success ? $"Merge complete: {Path.GetFileName(outFile)}" : "Merge failed";
+            _messenger.Send(new LogMessage(success
+                ? $"Merge complete: {outFile}"
+                : "Merge failed."));
+        }
+
+        private void AddMontageItem(string filePath, TimeSpan duration)
+        {
+            if (MontageItems.Any(x => string.Equals(x.FilePath, filePath, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            MontageItems.Add(new MontageItem
+            {
+                FilePath = filePath,
+                TypeIcon = "🎬",
+                Duration = duration
+            });
+        }
+
+        private static string EscapeConcatPath(string path) => path.Replace("\\", "/").Replace("'", "'\\''");
 
         [RelayCommand]
         private async Task PreviewSegment()

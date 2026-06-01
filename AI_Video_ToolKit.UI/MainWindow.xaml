@@ -783,9 +783,8 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
-                                <StackPanel Grid.Row="0"
-                                            Orientation="Horizontal"
-                                            HorizontalAlignment="Center">
+                                <WrapPanel Grid.Row="0"
+                                           HorizontalAlignment="Center">
                                         <StackPanel Orientation="Vertical"
                                                     Margin="10,0">
                                                 <TextBlock Text="Playback"
@@ -794,8 +793,7 @@
                                                            Margin="0,0,0,4"
                                                            HorizontalAlignment="Center"/>
                                                 <Button Command="{Binding PreviewSegmentCommand}"
-                                                        Style="{StaticResource PrimaryButton}"
-                                                        Width="90"
+                                                        Style="{StaticResource TransportButton}"
                                                         ToolTip="Preview selected segment">
                                                         <StackPanel Orientation="Horizontal">
                                                                 <TextBlock Text="▶ "
@@ -818,8 +816,7 @@
                                                         <Button Command="{Binding ExportSelectedCommand}"
                                                                 CommandParameter="{Binding SelectedSegment}"
                                                                 IsEnabled="{Binding CanExport}"
-                                                                Style="{StaticResource SecondaryButton}"
-                                                                Width="80"
+                                                                Style="{StaticResource TransportButton}"
                                                                 Margin="0,0,6,0"
                                                                 ToolTip="Export selected segments">
                                                                 <StackPanel Orientation="Horizontal">
@@ -832,8 +829,7 @@
 
                                                         <Button Command="{Binding ExportAllCommand}"
                                                                 IsEnabled="{Binding CanExport}"
-                                                                Style="{StaticResource SecondaryButton}"
-                                                                Width="80"
+                                                                Style="{StaticResource TransportButton}"
                                                                 ToolTip="Export all segments">
                                                                 <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="📦 "
@@ -855,8 +851,7 @@
                                                            HorizontalAlignment="Center"/>
                                                 <StackPanel Orientation="Horizontal">
                                                         <Button Command="{Binding UndoMarkerCommand}"
-                                                                Style="{StaticResource SecondaryButton}"
-                                                                Width="80"
+                                                                Style="{StaticResource TransportButton}"
                                                                 Margin="0,0,6,0"
                                                                 ToolTip="Undo last cut (Ctrl+Z)">
                                                                 <StackPanel Orientation="Horizontal">
@@ -867,8 +862,7 @@
                                                                 </StackPanel>
                                                         </Button>
                                                         <Button Command="{Binding ClearCutsCommand}"
-                                                                Style="{StaticResource SecondaryButton}"
-                                                                Width="80"
+                                                                Style="{StaticResource TransportButton}"
                                                                 ToolTip="Clear all cut points">
                                                                 <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="🗑️ "
@@ -879,7 +873,57 @@
                                                         </Button>
                                                 </StackPanel>
                                         </StackPanel>
-                                </StackPanel>
+                                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"
+                                                   Margin="10,4"/>
+                                        <StackPanel Orientation="Vertical"
+                                                    Margin="10,0">
+                                                <TextBlock Text="Frames"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           FontSize="10"
+                                                           Margin="0,0,0,4"
+                                                           HorizontalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding ExtractFramesCommand}"
+                                                                Style="{StaticResource TransportButton}"
+                                                                Margin="0,0,6,0"
+                                                                ToolTip="Разобрать загруженное видео на кадры в папку Frames">
+                                                                <TextBlock Text="▦"
+                                                                           FontSize="18"/>
+                                                        </Button>
+                                                        <Button Command="{Binding BuildVideoFromFramesCommand}"
+                                                                Style="{StaticResource TransportButton}"
+                                                                ToolTip="Собрать видео из кадров папки Frames в папку Output">
+                                                                <TextBlock Text="▣"
+                                                                           FontSize="18"/>
+                                                        </Button>
+                                                </StackPanel>
+                                        </StackPanel>
+                                        <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"
+                                                   Margin="10,4"/>
+                                        <StackPanel Orientation="Vertical"
+                                                    Margin="10,0">
+                                                <TextBlock Text="Merge"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           FontSize="10"
+                                                           Margin="0,0,0,4"
+                                                           HorizontalAlignment="Center"/>
+                                                <StackPanel Orientation="Horizontal">
+                                                        <Button Command="{Binding MergeMontageCommand}"
+                                                                Style="{StaticResource TransportButton}"
+                                                                Margin="0,0,6,0"
+                                                                ToolTip="Склеить все ролики из монтажной панели">
+                                                                <TextBlock Text="⧉"
+                                                                           FontSize="18"/>
+                                                        </Button>
+                                                        <Button Click="MergeSelectedMontage_Click"
+                                                                Style="{StaticResource TransportButton}"
+                                                                ToolTip="Склеить выделенные ролики">
+                                                                <TextBlock Text="⧇"
+                                                                           FontSize="18"/>
+                                                        </Button>
+                                                </StackPanel>
+                                        </StackPanel>
+                                </WrapPanel>
                                 <!--  прогресс бар -->
                                 <ProgressBar x:Name="ExportProgress"
                                              Grid.Row="1"
@@ -889,9 +933,13 @@
                                              Minimum="0"
                                              Maximum="100"
                                              Value="{Binding ExportProgress}"
-                                             Visibility="Visible"/>
-                                <!--             Visibility="{Binding IsExporting, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                 -->
+                                             Visibility="{Binding IsExporting, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Grid.Row="1"
+                                           Text="{Binding ExportStatus}"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           FontSize="10"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,30,0,0"/>
                         </Grid>
                 </Border>
 
@@ -933,6 +981,8 @@
                                                  Grid.Row="1"
                                                  Background="{StaticResource SurfaceBrush}"
                                                  ItemsSource="{Binding MontageItems}"
+                                                 SelectedItem="{Binding SelectedMontageItem}"
+                                                 SelectionMode="Extended"
                                                  MinHeight="70"
                                                  MaxHeight="100"
                                                  BorderThickness="0"

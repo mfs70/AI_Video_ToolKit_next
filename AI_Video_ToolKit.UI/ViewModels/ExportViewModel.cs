@@ -1,4 +1,3 @@
-// Файл: ViewModels/ExportViewModel.cs
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,7 +9,6 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using AI_Video_ToolKit.Infrastructure.Services;
 using AI_Video_ToolKit.UI.Messages;
-using AI_Video_ToolKit.UI.ViewModels;
 
 namespace AI_Video_ToolKit.UI.ViewModels
 {
@@ -27,16 +25,14 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private int _exportProgress;
 
         [ObservableProperty]
-        private string _exportStatus = "✅ Готов";
+        private string _exportStatus = "Ready";
 
         private IReadOnlyList<SegmentInfo> _segments = Array.Empty<SegmentInfo>();
         private string _currentFilePath = string.Empty;
-        private double _fps;
         private long _videoBitrate;
+        private DateTime _lastProgressUiUpdate = DateTime.MinValue;
+        private int _lastReportedProgress = -1;
 
-        /// <summary>
-        /// Доступность экспорта (не занят и есть сегменты)
-        /// </summary>
         public bool CanExport => !IsBusy && _segments.Any();
 
         partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanExport));
@@ -46,39 +42,44 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _ffmpeg = ffmpeg;
             _messenger = messenger;
 
-            _messenger.Register<SegmentsChangedMessage>(this, (r, m) =>
+            _messenger.Register<SegmentsChangedMessage>(this, (_, message) =>
             {
-                _segments = m.Segments;
+                _segments = message.Segments;
                 OnPropertyChanged(nameof(CanExport));
             });
 
-            _messenger.Register<FileLoadedMessage>(this, (r, m) =>
+            _messenger.Register<FileLoadedMessage>(this, (_, message) =>
             {
-                _currentFilePath = m.FilePath;
-                _fps = m.Fps;
-                _videoBitrate = m.VideoBitrate;
+                _currentFilePath = message.FilePath;
+                _videoBitrate = message.VideoBitrate;
             });
         }
 
-        [RelayCommand] // Убрали CanExecute
+        [RelayCommand]
         private async Task ExportSelected(SegmentInfo? segment)
         {
             if (segment == null)
             {
-                ExportStatus = "❌ Выберите сегмент для экспорта";
+                ExportStatus = "Select a segment before export";
+                _messenger.Send(new LogMessage("Export selected clicked: no segment selected."));
                 return;
             }
+
+            _messenger.Send(new LogMessage($"Export selected clicked: segment {segment.Index}."));
             await ExportSegments(new List<SegmentInfo> { segment });
         }
 
-        [RelayCommand] // Убрали CanExecute
+        [RelayCommand]
         private async Task ExportAll()
         {
             if (_segments.Count == 0)
             {
-                ExportStatus = "❌ Нет сегментов для экспорта";
+                ExportStatus = "No segments to export";
+                _messenger.Send(new LogMessage("Export all clicked: no segments."));
                 return;
             }
+
+            _messenger.Send(new LogMessage($"Export all clicked: {_segments.Count} segment(s)."));
             await ExportSegments(_segments);
         }
 
@@ -86,7 +87,8 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private void CancelExport()
         {
             _cts?.Cancel();
-            ExportStatus = "⏹ Отмена...";
+            ExportStatus = "Cancelling export...";
+            _messenger.Send(new LogMessage("Cancel export clicked."));
             _messenger.Send(new ExportCancelledMessage());
         }
 
@@ -95,14 +97,18 @@ namespace AI_Video_ToolKit.UI.ViewModels
             if (IsBusy) return;
             if (string.IsNullOrEmpty(_currentFilePath))
             {
-                ExportStatus = "❌ Нет загруженного файла";
+                ExportStatus = "No loaded file for export";
+                _messenger.Send(new LogMessage("Export skipped: no loaded file."));
                 return;
             }
 
             IsBusy = true;
             ExportProgress = 0;
+            _lastProgressUiUpdate = DateTime.MinValue;
+            _lastReportedProgress = -1;
             _cts = new CancellationTokenSource();
             _messenger.Send(new ExportStartedMessage());
+            _messenger.Send(new LogMessage($"Export started: {segments.Count} segment(s)."));
 
             var root = Directory.GetCurrentDirectory();
             var cutDir = Path.Combine(root, "Cut");
@@ -110,18 +116,13 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
             var srcName = Path.GetFileNameWithoutExtension(_currentFilePath);
             var ext = Path.GetExtension(_currentFilePath);
-
             var totalSegments = segments.Count;
             var successfulExports = 0;
 
-            for (int i = 0; i < totalSegments; i++)
+            for (var i = 0; i < totalSegments; i++)
             {
                 if (_cts.Token.IsCancellationRequested)
-                {
-                    ExportStatus = "⏹ Экспорт отменён";
-                    _messenger.Send(new ExportFinishedMessage(false));
                     break;
-                }
 
                 var seg = segments[i];
                 if (seg == null) continue;
@@ -129,49 +130,75 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 var outFile = Path.Combine(cutDir,
                     $"{seg.Index:000}_{srcName}_{seg.StartFrame}_{seg.EndFrame}{ext}");
 
-                ExportStatus = $"📤 Экспорт {i + 1} / {totalSegments}: {Path.GetFileName(outFile)}";
+                ExportStatus = $"Export {i + 1}/{totalSegments}: {Path.GetFileName(outFile)}";
 
                 var segmentIndex = i;
                 var segmentProgress = new Progress<double>(value =>
                 {
-                    // Smooth export progress: completed segments plus current FFmpeg progress.
+                    // Throttle progress notifications so long exports do not flood the UI thread.
                     var total = (segmentIndex + Math.Clamp(value, 0, 1)) * 100.0 / totalSegments;
-                    ExportProgress = (int)Math.Clamp(total, 0, 100);
+                    ReportProgress((int)Math.Clamp(total, 0, 100), force: value >= 1);
                 });
 
                 var success = await ExportSingleSegment(seg, outFile, _cts.Token, segmentProgress);
-                if (success) successfulExports++;
+                if (success)
+                {
+                    successfulExports++;
+                    _messenger.Send(new ExportedMediaMessage(outFile, seg.Duration));
+                    _messenger.Send(new LogMessage($"Exported segment: {Path.GetFileName(outFile)}"));
+                }
 
-                ExportProgress = (int)((i + 1) * 100.0 / totalSegments);
+                ReportProgress((int)((i + 1) * 100.0 / totalSegments), force: true);
             }
-
-            IsBusy = false;
 
             if (successfulExports == totalSegments)
             {
-                ExportStatus = $"✅ Экспорт завершён: {successfulExports} файлов";
+                ReportProgress(100, force: true);
+                ExportStatus = $"Export complete: {successfulExports} file(s)";
+                _messenger.Send(new LogMessage($"All segments ready: {successfulExports} file(s)."));
                 _messenger.Send(new ExportFinishedMessage(true, cutDir));
             }
             else if (successfulExports > 0)
             {
-                ExportStatus = $"⚠ Экспорт частичный: {successfulExports} из {totalSegments}";
+                ExportStatus = $"Partial export: {successfulExports}/{totalSegments}";
+                _messenger.Send(new LogMessage($"Export partially complete: {successfulExports}/{totalSegments}."));
                 _messenger.Send(new ExportFinishedMessage(true, cutDir));
             }
             else if (_cts.IsCancellationRequested)
             {
-                ExportStatus = "⏹ Экспорт отменён";
+                ExportStatus = "Export cancelled";
+                _messenger.Send(new LogMessage("Export cancelled."));
                 _messenger.Send(new ExportFinishedMessage(false));
             }
             else
             {
-                ExportStatus = "❌ Ошибка экспорта";
+                ExportStatus = "Export failed";
+                _messenger.Send(new LogMessage("Export failed."));
                 _messenger.Send(new ExportFinishedMessage(false));
             }
 
+            IsBusy = false;
+            ExportProgress = 0;
             _cts.Dispose();
             _cts = null;
             OnPropertyChanged(nameof(IsBusy));
             OnPropertyChanged(nameof(CanExport));
+        }
+
+        private void ReportProgress(int percent, bool force = false)
+        {
+            var now = DateTime.UtcNow;
+            if (!force &&
+                percent == _lastReportedProgress &&
+                (now - _lastProgressUiUpdate).TotalMilliseconds < 150)
+            {
+                return;
+            }
+
+            _lastReportedProgress = percent;
+            _lastProgressUiUpdate = now;
+            ExportProgress = percent;
+            _messenger.Send(new ExportProgressMessage(percent));
         }
 
         private async Task<bool> ExportSingleSegment(
@@ -187,15 +214,18 @@ namespace AI_Video_ToolKit.UI.ViewModels
                 var bitrateKbps = Math.Max(1500, (int)((_videoBitrate > 0 ? _videoBitrate : 4_000_000) / 1000));
 
                 var args = $"-y -hide_banner -nostats -progress pipe:1 -ss {startTime} -to {endTime} -i \"{_currentFilePath}\" " +
-                          $"-c:v libx264 -preset veryfast -b:v {bitrateKbps}k " +
-                          $"-c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 " +
-                          $"-movflags +faststart \"{outFile}\"";
+                           $"-c:v libx264 -preset veryfast -b:v {bitrateKbps}k " +
+                           $"-c:a aac -ar 48000 -vsync cfr -async 1 -reset_timestamps 1 " +
+                           $"-movflags +faststart \"{outFile}\"";
 
                 var success = await _ffmpeg.RunFfmpegAsync(args, seg.Duration, progress, token);
                 if (!success && File.Exists(outFile)) File.Delete(outFile);
                 return success;
             }
-            catch (OperationCanceledException) { return false; }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
             catch (Exception ex)
             {
                 _messenger.Send(new LogMessage($"Export error: {ex.Message}"));

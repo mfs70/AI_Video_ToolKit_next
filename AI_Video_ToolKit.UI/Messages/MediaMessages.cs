@@ -16,6 +16,7 @@ namespace AI_Video_ToolKit.UI.Messages
     public record ExportProgressMessage(int Percent);
     // Сообщение о завершении экспорта (успех/ошибка)
     public record ExportFinishedMessage(bool Success, string ResultPath = "");
+    public record ExportedMediaMessage(string FilePath, TimeSpan Duration);
     // Сообщение об отмене экспорта
     public record ExportCancelledMessage();
     // Сообщение об обновлении сегментов
