@@ -26,6 +26,10 @@ namespace AI_Video_ToolKit.UI
         private readonly IMessenger _messenger;
         private DateTime _lastTimelinePositionLog = DateTime.MinValue;
         private DateTime _lastTimelineSeekLog = DateTime.MinValue;
+        private Point _montageDragStart;
+        private MontageItem _draggedMontageItem;
+        private Point _playlistDragStart;
+        private PlaylistItem _draggedPlaylistItem;
         public MainWindow(MainViewModel viewModel, PlaybackService playback, IMessenger messenger)
 //       public MainWindow(MainViewModel viewModel, PlaybackService playback)
         {
@@ -254,6 +258,26 @@ namespace AI_Video_ToolKit.UI
             Log($"Playlist item opened: {item.FileName}");
         }
 
+        private void PlaylistListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _playlistDragStart = e.GetPosition(null);
+            _draggedPlaylistItem = FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext as PlaylistItem;
+        }
+
+        private void PlaylistListBox_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed || _draggedPlaylistItem == null)
+                return;
+
+            var position = e.GetPosition(null);
+            if (Math.Abs(position.X - _playlistDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(position.Y - _playlistDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            DragDrop.DoDragDrop(PlaylistListBox, _draggedPlaylistItem, DragDropEffects.Copy);
+            _draggedPlaylistItem = null;
+        }
+
         // ==================== Drag & Drop ====================
         private void Playlist_Drop(object sender, DragEventArgs e)
         {
@@ -317,8 +341,67 @@ namespace AI_Video_ToolKit.UI
 
         private void MontageTable_Drop(object sender, DragEventArgs e) { e.Handled = true; }
         private void MontageTable_DragOver(object sender, DragEventArgs e) { e.Effects = DragDropEffects.None; e.Handled = true; }
-        private void MontageList_Drop(object sender, DragEventArgs e) { e.Handled = true; }
-        private void MontageList_DragOver(object sender, DragEventArgs e) { e.Effects = DragDropEffects.None; e.Handled = true; }
+        private async void MontageList_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(typeof(MontageItem)) &&
+                e.Data.GetData(typeof(MontageItem)) is MontageItem dragged &&
+                FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is MontageItem target)
+            {
+                _viewModel.MoveMontageItem(dragged, target);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Data.GetDataPresent(typeof(PlaylistItem)) &&
+                e.Data.GetData(typeof(PlaylistItem)) is PlaylistItem playlistItem)
+            {
+                await _viewModel.AddFileToMontageFromDrop(playlistItem.FilePath);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                e.Data.GetData(DataFormats.FileDrop) is string[] files)
+            {
+                foreach (var file in files.Where(File.Exists))
+                    await _viewModel.AddFileToMontageFromDrop(file);
+                e.Handled = true;
+                return;
+            }
+
+            e.Handled = true;
+        }
+
+        private void MontageList_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects =
+                e.Data.GetDataPresent(typeof(MontageItem)) ||
+                e.Data.GetDataPresent(typeof(PlaylistItem)) ||
+                e.Data.GetDataPresent(DataFormats.FileDrop)
+                    ? DragDropEffects.Move
+                    : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void MontageList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _montageDragStart = e.GetPosition(null);
+            _draggedMontageItem = FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext as MontageItem;
+        }
+
+        private void MontageList_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed || _draggedMontageItem == null)
+                return;
+
+            var position = e.GetPosition(null);
+            if (Math.Abs(position.X - _montageDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(position.Y - _montageDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            DragDrop.DoDragDrop(MontageList, _draggedMontageItem, DragDropEffects.Move);
+            _draggedMontageItem = null;
+        }
 
         private async void MergeSelectedMontage_Click(object sender, RoutedEventArgs e)
         {
@@ -330,6 +413,12 @@ namespace AI_Video_ToolKit.UI
         }
 
         // ==================== Горячие клавиши ====================
+        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!IsInsideElement(e.OriginalSource as DependencyObject, Timeline))
+                Timeline.ClearSelection();
+        }
+
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
@@ -343,6 +432,14 @@ namespace AI_Video_ToolKit.UI
             if (e.Key == Key.C) { _viewModel.MarkCutCommand.Execute(null); e.Handled = true; return; }
             if (e.Key == Key.Delete)
             {
+                var selectedMontage = MontageList.SelectedItems.OfType<MontageItem>().ToList();
+                if (selectedMontage.Count > 0 || MontageList.IsKeyboardFocusWithin)
+                {
+                    _viewModel.RemoveMontageItems(selectedMontage);
+                    e.Handled = true;
+                    return;
+                }
+
                 _viewModel.RemoveSelectedFromPlaylistCommand.Execute(null);
                 ScrollSelectedPlaylistItemIntoView();
                 e.Handled = true;
@@ -351,7 +448,13 @@ namespace AI_Video_ToolKit.UI
             if (e.Key == Key.R) { e.Handled = true; return; }
             if (e.Key == Key.A) { e.Handled = true; return; }
             if (e.Key == Key.V) { e.Handled = true; return; }
-            if (e.Key == Key.M) { e.Handled = true; return; }
+            if (e.Key == Key.M)
+            {
+                if (_viewModel.MergeMontageCommand.CanExecute(null))
+                    _viewModel.MergeMontageCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
             if (e.Key == Key.Right || e.Key == Key.Left)
             {
                 // Window preview keys are raised before TimelineControl gets the event.
@@ -497,6 +600,32 @@ namespace AI_Video_ToolKit.UI
                 _timelineRefreshTimer.Start();
                 Log("Timeline refresh timer started.");
             }
+        }
+
+        private static bool IsInsideElement(DependencyObject source, DependencyObject target)
+        {
+            while (source != null)
+            {
+                if (ReferenceEquals(source, target))
+                    return true;
+
+                source = VisualTreeHelper.GetParent(source);
+            }
+
+            return false;
+        }
+
+        private static T FindAncestor<T>(DependencyObject source) where T : DependencyObject
+        {
+            while (source != null)
+            {
+                if (source is T typed)
+                    return typed;
+
+                source = VisualTreeHelper.GetParent(source);
+            }
+
+            return null;
         }
 
         private async Task LoadAndSync(string filePath)

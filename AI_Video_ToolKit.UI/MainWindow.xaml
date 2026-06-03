@@ -12,6 +12,7 @@
         MinHeight="600"
         Background="#1E1E1E"
         PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewMouseDown="Window_PreviewMouseDown"
         AllowDrop="True"
         Drop="Window_Drop"
         WindowStartupLocation="CenterScreen"
@@ -471,6 +472,8 @@
                                                  Drop="Playlist_Drop"
                                                  DragOver="Playlist_DragOver"
                                                  MouseDoubleClick="PlaylistListBox_MouseDoubleClick"
+                                                 PreviewMouseLeftButtonDown="PlaylistListBox_PreviewMouseLeftButtonDown"
+                                                 MouseMove="PlaylistListBox_MouseMove"
                                                  VirtualizingStackPanel.IsVirtualizing="True"
                                                  VirtualizingStackPanel.VirtualizationMode="Recycling">
                                                 <ListBox.ItemTemplate>
@@ -989,22 +992,48 @@
                                                  AllowDrop="True"
                                                  Drop="MontageList_Drop"
                                                  DragOver="MontageList_DragOver"
-                                                 VirtualizingStackPanel.IsVirtualizing="True"
-                                                 VirtualizingStackPanel.VirtualizationMode="Recycling">
+                                                 PreviewMouseLeftButtonDown="MontageList_PreviewMouseLeftButtonDown"
+                                                 MouseMove="MontageList_MouseMove"
+                                                 VirtualizingStackPanel.IsVirtualizing="False"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                                <ListBox.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal"/>
+                                                        </ItemsPanelTemplate>
+                                                </ListBox.ItemsPanel>
                                                 <ListBox.ItemTemplate>
                                                         <DataTemplate>
-                                                                <StackPanel Orientation="Horizontal">
-                                                                        <TextBlock Text="{Binding TypeIcon}"
-                                                                                   Margin="0,0,5,0"/>
-                                                                        <TextBlock Text="{Binding FileName}"
-                                                                                   Margin="0,0,5,0"/>
-                                                                        <TextBlock Text="("
-                                                                                   Foreground="#888"/>
-                                                                        <TextBlock Text="{Binding DurationStr}"
-                                                                                   Foreground="#888"/>
-                                                                        <TextBlock Text=")"
-                                                                                   Foreground="#888"/>
-                                                                </StackPanel>
+                                                                <Border Width="128"
+                                                                        Height="72"
+                                                                        Margin="3"
+                                                                        CornerRadius="4"
+                                                                        BorderThickness="1"
+                                                                        BorderBrush="#3E3E42"
+                                                                        Background="#111111"
+                                                                        ToolTip="{Binding FileName}">
+                                                                        <Grid ClipToBounds="True">
+                                                                                <Image Source="{Binding Thumbnail}"
+                                                                                       Stretch="UniformToFill"/>
+                                                                                <Border VerticalAlignment="Top"
+                                                                                        HorizontalAlignment="Left"
+                                                                                        Background="#CC000000"
+                                                                                        CornerRadius="0,0,4,0"
+                                                                                        Padding="5,2">
+                                                                                        <TextBlock Text="{Binding IndexLabel}"
+                                                                                                   Foreground="White"
+                                                                                                   FontWeight="Bold"
+                                                                                                   FontSize="12"/>
+                                                                                </Border>
+                                                                                <TextBlock Text="{Binding FileName}"
+                                                                                           VerticalAlignment="Bottom"
+                                                                                           Foreground="White"
+                                                                                           Background="#CC000000"
+                                                                                           Padding="4,2"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           FontSize="10"/>
+                                                                        </Grid>
+                                                                </Border>
                                                         </DataTemplate>
                                                 </ListBox.ItemTemplate>
                                         </ListBox>

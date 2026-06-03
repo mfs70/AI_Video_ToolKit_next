@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -13,6 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Win32;
 using AI_Video_ToolKit.Infrastructure.Services;
+using AI_Video_ToolKit.UI.Dialogs;
 using AI_Video_ToolKit.UI.Services;
 using AI_Video_ToolKit.UI.Messages;
 using AI_Video_ToolKit.UI.ViewModels;
@@ -61,7 +63,12 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public event Action<BitmapImage>? ImageLoaded;
 
         public ObservableCollection<MontageItem> MontageItems { get; } = new();
-        public MontageItem? SelectedMontageItem { get; set; }
+        private MontageItem? _selectedMontageItem;
+        public MontageItem? SelectedMontageItem
+        {
+            get => _selectedMontageItem;
+            set => SetProperty(ref _selectedMontageItem, value);
+        }
 
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex = 3;
@@ -227,10 +234,17 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
             var framesDir = Path.Combine(Directory.GetCurrentDirectory(), "Frames");
             Directory.CreateDirectory(framesDir);
+            framesDir = ChooseFolder("Select folder for extracted frames", framesDir);
+            if (string.IsNullOrWhiteSpace(framesDir))
+            {
+                _messenger.Send(new LogMessage("Extract frames cancelled by user."));
+                return;
+            }
+
             StatusText = "Extracting frames...";
             var outputPattern = Path.Combine(framesDir, "frame_%06d.png");
-            var args = $"-y -hide_banner -i \"{CurrentFile}\" -vsync 0 \"{outputPattern}\"";
-            var success = await _ffmpeg.RunFfmpegAsync(args);
+            var args = $"-y -hide_banner -i \"{CurrentFile}\" -vsync 0 -progress pipe:1 -nostats \"{outputPattern}\"";
+            var success = await RunProgressFfmpegAsync(args, GetCurrentMediaDuration(), "Extracting frames...");
             StatusText = success ? $"Frames saved: {framesDir}" : "Frame extraction failed";
             _messenger.Send(new LogMessage(success
                 ? $"Extract frames complete: {framesDir}"
@@ -243,24 +257,66 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new LogMessage("Action clicked: build video from Frames."));
             var root = Directory.GetCurrentDirectory();
             var framesDir = Path.Combine(root, "Frames");
-            if (!Directory.Exists(framesDir) || !Directory.EnumerateFiles(framesDir, "frame_*.png").Any())
+            Directory.CreateDirectory(framesDir);
+            framesDir = ChooseFolder("Select folder with frames", framesDir);
+            if (string.IsNullOrWhiteSpace(framesDir))
+            {
+                _messenger.Send(new LogMessage("Build from frames cancelled by user."));
+                return;
+            }
+
+            var images = GetFrameImages(framesDir);
+            if (images.Count == 0)
             {
                 StatusText = "Frames folder is empty";
-                _messenger.Send(new LogMessage("Build video skipped: Frames folder is empty."));
+                _messenger.Send(new LogMessage($"Build video skipped: no images in {framesDir}."));
+                return;
+            }
+
+            var options = new FrameBuildOptionsDialog(framesDir)
+            {
+                Owner = Application.Current?.MainWindow
+            };
+            if (options.ShowDialog() != true)
+            {
+                _messenger.Send(new LogMessage("Build from frames cancelled in options dialog."));
                 return;
             }
 
             var outputDir = Path.Combine(root, "Output");
             Directory.CreateDirectory(outputDir);
             var fps = FileFps > 0 ? FileFps : 25;
-            var outFile = Path.Combine(outputDir, $"frames_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
+            var extension = NormalizeExtension(options.SelectedFormat);
+            var outFile = Path.Combine(outputDir, $"frames_{DateTime.Now:yyyyMMdd_HHmmss}{extension}");
             StatusText = "Building video from frames...";
-            var inputPattern = Path.Combine(framesDir, "frame_%06d.png");
-            var args = $"-y -hide_banner -framerate {fps.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
-                       $"-i \"{inputPattern}\" -c:v libx264 -pix_fmt yuv420p \"{outFile}\"";
-            var success = await _ffmpeg.RunFfmpegAsync(args);
+            var qualityArgs = GetQualityArguments(options.SelectedQuality);
+            var expectedDuration = images.Count == 1
+                ? TimeSpan.FromSeconds(4)
+                : TimeSpan.FromSeconds(images.Count / Math.Max(1, fps));
+
+            string? concatList = null;
+            string args;
+            if (images.Count == 1)
+            {
+                // A single still image becomes a four-second video clip.
+                args = $"-y -hide_banner -loop 1 -t 4 -i \"{images[0]}\" " +
+                       $"-vf fps={fps.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
+                       $"-c:v libx264 {qualityArgs} -pix_fmt yuv420p -progress pipe:1 -nostats \"{outFile}\"";
+            }
+            else
+            {
+                // The concat list supports arbitrary file names, not only frame_000001.png.
+                concatList = CreateImageConcatList(images, fps, outputDir);
+                args = $"-y -hide_banner -f concat -safe 0 -i \"{concatList}\" -vsync vfr " +
+                       $"-c:v libx264 {qualityArgs} -pix_fmt yuv420p -progress pipe:1 -nostats \"{outFile}\"";
+            }
+
+            var success = await RunProgressFfmpegAsync(args, expectedDuration, "Building video from frames...");
+            if (!string.IsNullOrEmpty(concatList) && File.Exists(concatList))
+                File.Delete(concatList);
+
             if (success)
-                AddMontageItem(outFile, TimeSpan.Zero);
+                AddMontageItem(outFile, expectedDuration);
 
             StatusText = success ? $"Video built: {Path.GetFileName(outFile)}" : "Build from frames failed";
             _messenger.Send(new LogMessage(success
@@ -319,11 +375,169 @@ namespace AI_Video_ToolKit.UI.ViewModels
             {
                 FilePath = filePath,
                 TypeIcon = "🎬",
-                Duration = duration
+                Duration = duration,
+                Order = MontageItems.Count + 1
             });
+            _ = LoadMontageThumbnailAsync(MontageItems[^1]);
+        }
+
+        public void RemoveMontageItems(IEnumerable<MontageItem> items)
+        {
+            foreach (var item in items.ToList())
+                MontageItems.Remove(item);
+
+            RenumberMontageItems();
+            _messenger.Send(new LogMessage("Montage selection removed from table only; files in Cut were preserved."));
+        }
+
+        public void MoveMontageItem(MontageItem dragged, MontageItem target)
+        {
+            var oldIndex = MontageItems.IndexOf(dragged);
+            var newIndex = MontageItems.IndexOf(target);
+            if (oldIndex < 0 || newIndex < 0 || oldIndex == newIndex)
+                return;
+
+            MontageItems.Move(oldIndex, newIndex);
+            RenumberMontageItems();
+            _messenger.Send(new LogMessage($"Montage clip moved: {dragged.FileName} -> position {newIndex + 1:000}."));
+        }
+
+        public async Task AddFileToMontageFromDrop(string sourcePath)
+        {
+            if (!File.Exists(sourcePath))
+                return;
+
+            var root = Directory.GetCurrentDirectory();
+            var cutDir = Path.Combine(root, "Cut");
+            Directory.CreateDirectory(cutDir);
+            var info = await _ffprobe.GetInfoAsync(sourcePath);
+            var fps = info.Fps > 0 ? info.Fps : 25;
+            var duration = TimeSpan.FromSeconds(Math.Max(0, info.Duration));
+            var endFrame = Math.Max(0, (long)Math.Round(duration.TotalSeconds * fps) - 1);
+            var index = MontageItems.Count + 1;
+            var name = Path.GetFileNameWithoutExtension(sourcePath);
+            var ext = Path.GetExtension(sourcePath);
+            var destination = Path.Combine(cutDir, $"{index:000}_{name}_0_{endFrame}{ext}");
+
+            StatusText = $"Adding to montage: {Path.GetFileName(sourcePath)}";
+            _messenger.Send(new LogMessage($"Montage drop: copying/transcoding {sourcePath} to Cut."));
+            var args = $"-y -hide_banner -i \"{sourcePath}\" -c:v libx264 -preset veryfast -crf 18 -c:a aac -progress pipe:1 -nostats \"{destination}\"";
+            var success = await RunProgressFfmpegAsync(args, duration > TimeSpan.Zero ? duration : TimeSpan.FromSeconds(1), "Adding clip to montage...");
+            if (success)
+            {
+                AddMontageItem(destination, duration);
+                StatusText = $"Added to montage: {Path.GetFileName(destination)}";
+            }
+            else
+            {
+                StatusText = "Failed to add clip to montage";
+            }
+        }
+
+        private async Task LoadMontageThumbnailAsync(MontageItem item)
+        {
+            var bitmap = await _grabber.GetFrame(item.FilePath, TimeSpan.Zero, 160, 90);
+            if (bitmap != null)
+                item.Thumbnail = bitmap;
+        }
+
+        private void RenumberMontageItems()
+        {
+            for (var i = 0; i < MontageItems.Count; i++)
+                MontageItems[i].Order = i + 1;
         }
 
         private static string EscapeConcatPath(string path) => path.Replace("\\", "/").Replace("'", "'\\''");
+
+        private async Task<bool> RunProgressFfmpegAsync(string args, TimeSpan expectedDuration, string status)
+        {
+            IsExporting = true;
+            ExportProgress = 0;
+            ExportStatus = status;
+            var progress = new Progress<double>(value =>
+            {
+                ExportProgress = (int)Math.Round(Math.Clamp(value, 0, 1) * 100);
+                ExportStatus = $"{status} {ExportProgress}%";
+            });
+
+            try
+            {
+                var success = await _ffmpeg.RunFfmpegAsync(args, expectedDuration, progress, CancellationToken.None);
+                ExportProgress = success ? 100 : 0;
+                ExportStatus = success ? "Operation complete" : "Operation failed";
+                return success;
+            }
+            finally
+            {
+                await Task.Delay(350);
+                IsExporting = false;
+                ExportProgress = 0;
+            }
+        }
+
+        private TimeSpan GetCurrentMediaDuration()
+        {
+            if (_playerVM.TotalDuration > TimeSpan.Zero)
+                return _playerVM.TotalDuration;
+
+            if (FileDurationSec > 0)
+                return TimeSpan.FromSeconds(FileDurationSec);
+
+            return TimeSpan.FromSeconds(1);
+        }
+
+        private static string? ChooseFolder(string title, string initialDirectory)
+        {
+            var dialog = new OpenFolderDialog
+            {
+                Title = title,
+                InitialDirectory = Directory.Exists(initialDirectory)
+                    ? initialDirectory
+                    : Directory.GetCurrentDirectory()
+            };
+
+            return dialog.ShowDialog() == true ? dialog.FolderName : null;
+        }
+
+        private static IReadOnlyList<string> GetFrameImages(string framesDir)
+        {
+            var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"
+            };
+
+            return Directory.EnumerateFiles(framesDir)
+                .Where(path => extensions.Contains(Path.GetExtension(path)))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static string CreateImageConcatList(IReadOnlyList<string> images, double fps, string outputDir)
+        {
+            var listFile = Path.Combine(outputDir, $"frames_concat_{DateTime.Now:yyyyMMdd_HHmmss_fff}.txt");
+            var frameDuration = 1.0 / Math.Max(1, fps);
+            var lines = new List<string>();
+            foreach (var image in images)
+            {
+                lines.Add($"file '{EscapeConcatPath(image)}'");
+                lines.Add($"duration {frameDuration.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+            }
+
+            lines.Add($"file '{EscapeConcatPath(images[^1])}'");
+            File.WriteAllLines(listFile, lines);
+            return listFile;
+        }
+
+        private static string NormalizeExtension(string extension)
+            => extension.StartsWith(".") ? extension : $".{extension}";
+
+        private static string GetQualityArguments(string preset)
+            => preset switch
+            {
+                "Low" => "-preset veryfast -crf 28",
+                "High" => "-preset slow -crf 18",
+                _ => "-preset medium -crf 23"
+            };
 
         [RelayCommand]
         private async Task PreviewSegment()
@@ -399,13 +613,32 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public string TypeIcon => IsVideo ? "🎬" : (IsImage ? "🖼️" : "📄");
     }
 
-    public class MontageItem
+    public partial class MontageItem : ObservableObject
     {
         public string FilePath { get; set; } = "";
         public string FileName => Path.GetFileName(FilePath);
         public string TypeIcon { get; set; } = "🎬";
+        private int _order;
+        public int Order
+        {
+            get => _order;
+            set
+            {
+                if (SetProperty(ref _order, value))
+                    OnPropertyChanged(nameof(IndexLabel));
+            }
+        }
+
         public TimeSpan Duration { get; set; }
         public string DurationStr => Duration.ToString(@"hh\:mm\:ss\.fff");
+        public string IndexLabel => Order.ToString("000");
+
+        private BitmapSource? _thumbnail;
+        public BitmapSource? Thumbnail
+        {
+            get => _thumbnail;
+            set => SetProperty(ref _thumbnail, value);
+        }
     }
 
     public class SegmentInfo

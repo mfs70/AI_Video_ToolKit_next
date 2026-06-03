@@ -222,7 +222,10 @@ namespace AI_Video_ToolKit.UI.ViewModels
             }
             else if (markerType == "Cut" && original.HasValue)
             {
-                var index = _cutMarkers.FindIndex(c => c == original.Value);
+                // Cut markers are sorted after every move, and the timeline snaps mouse/key
+                // input to frame boundaries. Matching with a one-frame tolerance keeps the
+                // selected marker stable even when TimeSpan ticks differ by a rounding tick.
+                var index = FindCutMarkerIndex(original.Value, frame);
                 if (index < 0) return;
 
                 var min = _inputMarker != TimeSpan.Zero ? _inputMarker + frame : frame;
@@ -239,6 +242,25 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _messenger.Send(new SegmentsChangedMessage(Segments.ToList()));
             MarkersChanged?.Invoke();
             _messenger.Send(new MarkersChangedMessage(_inputMarker, _outputMarker, _cutMarkers));
+        }
+
+        private int FindCutMarkerIndex(TimeSpan original, TimeSpan frame)
+        {
+            var bestIndex = -1;
+            var bestDistance = TimeSpan.MaxValue;
+            var tolerance = TimeSpan.FromTicks(Math.Max(1, frame.Ticks));
+
+            for (var i = 0; i < _cutMarkers.Count; i++)
+            {
+                var distance = (_cutMarkers[i] - original).Duration();
+                if (distance <= tolerance && distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
         }
 
         /// <summary>
