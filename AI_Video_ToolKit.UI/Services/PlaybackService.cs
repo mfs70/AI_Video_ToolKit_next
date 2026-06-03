@@ -26,6 +26,7 @@ namespace AI_Video_ToolKit.UI.Services
         private bool _audioEnabled;
         private bool _hasActiveSession;
         private bool _endedNaturally;
+        private TimeSpan _playbackStart;
 
 		private TimeSpan? _playbackEnd; //добавил
 
@@ -41,7 +42,10 @@ namespace AI_Video_ToolKit.UI.Services
 
 				if (_playbackEnd.HasValue && pos >= _playbackEnd.Value)
 				{
-					Stop();
+                    // Segment preview finishes back at the segment start instead of file zero.
+                    _current = _playbackStart;
+					Stop(resetPosition: false);
+                    OnPositionChanged?.Invoke(_playbackStart);
 					OnPlaybackEnded?.Invoke();
 					return;
 				}
@@ -62,9 +66,11 @@ namespace AI_Video_ToolKit.UI.Services
 
         public void Start(string file, double fps, TimeSpan startPosition, double speed = 1.0, bool enableAudio = true, TimeSpan? endPosition = null)
         {
-            Stop();
+            // Starting from a marker/segment must not publish an intermediate 00:00:00 seek.
+            Stop(resetPosition: false);
             _currentFile = file; _fps = fps; _speed = speed; _audioEnabled = enableAudio;
             _current = startPosition;
+            _playbackStart = startPosition;
             _endedNaturally = false;
             _player.Start(file, 1280, 720, fps, startPosition, speed, enableAudio);
             _isPlaying = true;
@@ -97,6 +103,7 @@ namespace AI_Video_ToolKit.UI.Services
 
 			_isPlaying = false;
 			_hasActiveSession = false;
+            _playbackEnd = null;
 
 			if (!resetPosition)
 				return;

@@ -6,7 +6,7 @@
     Все внешние сервисы (PlaybackService, FFprobeService, IMessenger) приходят через конструктор.
     Это делает ViewModel тестируемой и слабосвязанной.
     3. Маршалинг в UI-поток
-    События плеера приходят из фонового потока. _uiDispatcher.Invoke(...) перенаправляет обновление свойств в поток диспетчера WPF,
+    События плеера приходят из фонового потока. _uiDispatcher.BeginInvoke(...) перенаправляет обновление свойств в поток диспетчера WPF,
     чтобы избежать исключений о доступе к UI из другого потока.
     4. Обмен сообщениями
     IMessenger позволяет разным ViewModel общаться, не зная друг о друге. Здесь PlayerViewModel слушает LoadFileMessage,
@@ -90,9 +90,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
             _uiDispatcher = Dispatcher.CurrentDispatcher; // Запоминаем диспетчер UI-потока
 
             // Подписываемся на события плеера, маршалируя их в UI-поток
-            _playback.OnPositionChanged += pos => _uiDispatcher.Invoke(() => CurrentPosition = pos);
+            _playback.OnPositionChanged += pos => _uiDispatcher.BeginInvoke(() => CurrentPosition = pos);
             _playback.OnFrameChanged += frame => { }; // Можно реализовать позже
-            _playback.OnPlaybackEnded += () => _uiDispatcher.Invoke(() => IsPlaying = false);
+            _playback.OnPlaybackEnded += () => _uiDispatcher.BeginInvoke(() => IsPlaying = false);
 
             // Регистрируемся на сообщение о загрузке файла (от другого ViewModel или сервиса)
             _messenger.Register<LoadFileMessage>(this, async (r, m) => await LoadFile(m.FilePath));

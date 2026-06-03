@@ -20,6 +20,20 @@ namespace AI_Video_ToolKit.UI.Hotkeys
 
         Stop,
 
+        LoadFiles,
+
+        IncreaseSpeed,
+
+        DecreaseSpeed,
+
+        Speed1,
+
+        Speed2,
+
+        Speed4,
+
+        Speed8,
+
         NextFrame,
 
         PrevFrame,

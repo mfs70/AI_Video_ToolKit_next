@@ -713,19 +713,20 @@
                                             Margin="15,0,0,0">
                                         <CheckBox x:Name="VideoCheck"
                                                   Content="🎥 Video"
-                                                  IsChecked="True"
+                                                  IsChecked="{Binding IsVideoEnabled, Mode=TwoWay}"
                                                   Foreground="{StaticResource TextPrimaryBrush}"
                                                   Margin="0,0,15,0"
                                                   FontSize="12"
                                                   ToolTip="Enable/disable video track"/>
                                         <CheckBox x:Name="AudioCheck"
                                                   Content="🎧 Audio"
-                                                  IsChecked="True"
+                                                  IsChecked="{Binding IsAudioEnabled, Mode=TwoWay}"
                                                   Foreground="{StaticResource TextPrimaryBrush}"
                                                   Margin="0,0,15,0"
                                                   FontSize="12"
                                                   ToolTip="Enable/disable audio track"/>
                                         <CheckBox x:Name="LoopCheck"
+                                                  IsChecked="{Binding IsLoopEnabled, Mode=TwoWay}"
                                                   Content="🔁 Loop"
                                                   Foreground="{StaticResource TextPrimaryBrush}"
                                                   FontSize="12"
@@ -795,7 +796,7 @@
                                                            FontSize="10"
                                                            Margin="0,0,0,4"
                                                            HorizontalAlignment="Center"/>
-                                                <Button Command="{Binding PreviewSegmentCommand}"
+                                                <Button Click="Preview_Click"
                                                         Style="{StaticResource TransportButton}"
                                                         ToolTip="Preview selected segment">
                                                         <StackPanel Orientation="Horizontal">
@@ -994,6 +995,7 @@
                                                  DragOver="MontageList_DragOver"
                                                  PreviewMouseLeftButtonDown="MontageList_PreviewMouseLeftButtonDown"
                                                  MouseMove="MontageList_MouseMove"
+                                                 MouseDoubleClick="MontageList_MouseDoubleClick"
                                                  VirtualizingStackPanel.IsVirtualizing="False"
                                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                                  ScrollViewer.VerticalScrollBarVisibility="Disabled">

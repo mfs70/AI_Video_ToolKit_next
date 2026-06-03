@@ -72,6 +72,9 @@ namespace AI_Video_ToolKit.UI.ViewModels
 
         private readonly double[] _speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
         private int _speedIndex = 3;
+        [ObservableProperty] private bool _isAudioEnabled = true;
+        [ObservableProperty] private bool _isVideoEnabled = true;
+        [ObservableProperty] private bool _isLoopEnabled;
 
         // Прокси для доступности экспорта (добавлено)
         public bool CanExport => _exportVM.CanExport;
@@ -216,6 +219,27 @@ namespace AI_Video_ToolKit.UI.ViewModels
         public ICommand PlayPauseCommand => _playerVM.PlayPauseCommand;
         public ICommand StopCommand => _playerVM.StopCommand;
         public ICommand SeekCommand => _playerVM.SeekCommand;
+
+        [RelayCommand]
+        private void ToggleAudio()
+        {
+            IsAudioEnabled = !IsAudioEnabled;
+            _messenger.Send(new LogMessage($"Audio track {(IsAudioEnabled ? "enabled" : "disabled")}."));
+        }
+
+        [RelayCommand]
+        private void ToggleVideo()
+        {
+            IsVideoEnabled = !IsVideoEnabled;
+            _messenger.Send(new LogMessage($"Video track {(IsVideoEnabled ? "enabled" : "disabled")}."));
+        }
+
+        [RelayCommand]
+        private void ToggleLoop()
+        {
+            IsLoopEnabled = !IsLoopEnabled;
+            _messenger.Send(new LogMessage($"Loop {(IsLoopEnabled ? "enabled" : "disabled")}."));
+        }
 
         public void Next() => NextCommand.Execute(null);
         public void Previous() => PreviousCommand.Execute(null);
@@ -543,8 +567,11 @@ namespace AI_Video_ToolKit.UI.ViewModels
         private async Task PreviewSegment()
         {
             if (SelectedSegment == null) return;
-            _playback.Stop();
-            _playback.Start(CurrentFile, FileFps, SelectedSegment.Start, Speed, HasAudio, SelectedSegment.End);
+            _playback.Stop(resetPosition: false);
+            CurrentPosition = SelectedSegment.Start;
+            CurrentFrame = SelectedSegment.StartFrame;
+            _playback.SetPosition(SelectedSegment.Start);
+            _playback.Start(CurrentFile, FileFps, SelectedSegment.Start, Speed, HasAudio && IsAudioEnabled, SelectedSegment.End);
             IsPlaying = true;
             StatusText = "▶ Preview Segment";
             await Task.CompletedTask;

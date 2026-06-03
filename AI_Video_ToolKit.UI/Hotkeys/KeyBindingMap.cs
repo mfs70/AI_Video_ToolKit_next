@@ -52,13 +52,108 @@ namespace AI_Video_ToolKit.UI.Hotkeys
 
                 new()
                 {
+                    Key = Key.S,
+                    Action = InputAction.Stop
+                },
+
+                new()
+                {
+                    Key = Key.L,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.LoadFiles
+                },
+
+                new()
+                {
+                    Key = Key.L,
+                    Action = InputAction.IncreaseSpeed
+                },
+
+                new()
+                {
+                    Key = Key.J,
+                    Action = InputAction.DecreaseSpeed
+                },
+
+                new()
+                {
+                    Key = Key.D1,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed1
+                },
+
+                new()
+                {
+                    Key = Key.NumPad1,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed1
+                },
+
+                new()
+                {
+                    Key = Key.D2,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed2
+                },
+
+                new()
+                {
+                    Key = Key.NumPad2,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed2
+                },
+
+                new()
+                {
+                    Key = Key.D4,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed4
+                },
+
+                new()
+                {
+                    Key = Key.NumPad4,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed4
+                },
+
+                new()
+                {
+                    Key = Key.D8,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed8
+                },
+
+                new()
+                {
+                    Key = Key.NumPad8,
+                    Modifiers = ModifierKeys.Control,
+                    Action = InputAction.Speed8
+                },
+
+                new()
+                {
                     Key = Key.Right,
                     Action = InputAction.NextFrame
                 },
 
                 new()
                 {
+                    Key = Key.Right,
+                    Modifiers = ModifierKeys.Shift,
+                    Action = InputAction.NextFrame
+                },
+
+                new()
+                {
                     Key = Key.Left,
+                    Action = InputAction.PrevFrame
+                },
+
+                new()
+                {
+                    Key = Key.Left,
+                    Modifiers = ModifierKeys.Shift,
                     Action = InputAction.PrevFrame
                 },
 

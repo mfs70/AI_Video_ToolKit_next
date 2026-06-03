@@ -38,6 +38,7 @@ namespace AI_Video_ToolKit.UI.Controls
         private bool _isPlayheadSelected;
 
         public event Action<TimeSpan>? OnChanged;
+        public event Action<TimeSpan>? PreviewRequested;
         public event Action<MarkerSelection, TimeSpan?, TimeSpan>? MarkerMoved;
 
         public TimelineControl()
@@ -187,6 +188,8 @@ namespace AI_Video_ToolKit.UI.Controls
                 return;
             }
             _isPlayheadSelected = false;
+            if (_selectedMarkerTime.HasValue)
+                PreviewRequested?.Invoke(_selectedMarkerTime.Value);
             _dragType = _selectedType;
             _dragOriginalTime = _selectedMarkerTime;
             MarkerCanvas.CaptureMouse();
@@ -385,6 +388,7 @@ namespace AI_Video_ToolKit.UI.Controls
             }
             UpdateMarkerLayout();
             ApplySelectionVisualState();
+            PreviewRequested?.Invoke(moved);
         }
 
         private TimeSpan ClampMarker(MarkerSelection type, TimeSpan? original, TimeSpan requested)

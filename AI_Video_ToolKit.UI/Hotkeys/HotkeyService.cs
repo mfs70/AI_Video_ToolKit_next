@@ -1,49 +1,23 @@
-using System;
 using System.Windows.Input;
 
 namespace AI_Video_ToolKit.UI.Hotkeys
 {
-    // ------------------------------------------------------------
-    // Центральный сервис hotkeys.
-    //
-    // ВАЖНО:
-    //
-    // Сейчас работает в parallel mode.
-    //
-    // Старые hotkeys еще НЕ удалены.
-    // ------------------------------------------------------------
     public sealed class HotkeyService
     {
-        // --------------------------------------------------------
-        // Событие:
-        //
-        // сообщает что action выполнен.
-        // --------------------------------------------------------
-        public event Action<InputAction>? OnActionTriggered;
-
-        // --------------------------------------------------------
-        // Проверка keyboard input.
-        // --------------------------------------------------------
-        public bool TryHandle(KeyEventArgs e)
+        public bool TryResolve(KeyEventArgs e, out InputAction action)
         {
+            action = default;
+
             foreach (var binding in KeyBindingMap.Bindings)
             {
-                // ------------------------------------------------
-                // Проверяем:
-                // - key
-                // - modifiers
-                // ------------------------------------------------
-                if (binding.Key == e.Key &&
-                    binding.Modifiers ==
-                    Keyboard.Modifiers)
-                {
-                    OnActionTriggered?.Invoke(
-                        binding.Action);
+                if (binding.Key != e.Key)
+                    continue;
 
- //                   e.Handled = true;
+                if (binding.Modifiers != Keyboard.Modifiers)
+                    continue;
 
-                    return true;
-                }
+                action = binding.Action;
+                return true;
             }
 
             return false;

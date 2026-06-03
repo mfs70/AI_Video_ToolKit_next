@@ -14,6 +14,7 @@ using AI_Video_ToolKit.UI.Controls;
 using AI_Video_ToolKit.UI.ViewModels;
 using AI_Video_ToolKit.UI.Services;
 using AI_Video_ToolKit.UI.Messages;
+using AI_Video_ToolKit.UI.Hotkeys;
 using CommunityToolkit.Mvvm.Messaging;
 
 namespace AI_Video_ToolKit.UI
@@ -22,6 +23,7 @@ namespace AI_Video_ToolKit.UI
     {
         private readonly MainViewModel _viewModel;
         private readonly PlaybackService _playback;
+        private readonly HotkeyService _hotkeys;
         private readonly DispatcherTimer _timelineRefreshTimer;
         private readonly IMessenger _messenger;
         private DateTime _lastTimelinePositionLog = DateTime.MinValue;
@@ -30,13 +32,15 @@ namespace AI_Video_ToolKit.UI
         private MontageItem _draggedMontageItem;
         private Point _playlistDragStart;
         private PlaylistItem _draggedPlaylistItem;
-        public MainWindow(MainViewModel viewModel, PlaybackService playback, IMessenger messenger)
+        private bool _segmentPreviewActive;
+        public MainWindow(MainViewModel viewModel, PlaybackService playback, IMessenger messenger, HotkeyService hotkeys)
 //       public MainWindow(MainViewModel viewModel, PlaybackService playback)
         {
             InitializeComponent();
             DataContext = viewModel;
             _viewModel = viewModel;
             _playback = playback;
+            _hotkeys = hotkeys;
             
             _messenger = messenger;
  // Подписка на тестовое сообщение
@@ -80,6 +84,11 @@ namespace AI_Video_ToolKit.UI
                 _viewModel.MoveTimelineMarker(type.ToString(), original, moved);
                 UpdateTimelineMarkers();
             };
+            Timeline.PreviewRequested += time => Dispatcher.BeginInvoke(async () =>
+            {
+                await SeekToAsync(time);
+                SetPausedState();
+            });
 
             Timeline.OnChanged += async t =>
             {
@@ -98,8 +107,21 @@ namespace AI_Video_ToolKit.UI
                 // and bound view-model properties must be updated on the UI thread.
                 UpdatePositionUi(pos, updatePlaybackService: false);
             });
-            _playback.OnPlaybackEnded += () => Dispatcher.BeginInvoke(() =>
+            _playback.OnPlaybackEnded += () => Dispatcher.BeginInvoke(async () =>
             {
+                if (_viewModel.IsLoopEnabled && _segmentPreviewActive && _viewModel.SelectedSegment != null)
+                {
+                    await StartSelectedSegmentPreviewAsync();
+                    return;
+                }
+
+                if (_viewModel.IsLoopEnabled && !_segmentPreviewActive && !string.IsNullOrEmpty(_viewModel.CurrentFile))
+                {
+                    _playback.Start(_viewModel.CurrentFile, _viewModel.FileFps, TimeSpan.Zero, _viewModel.Speed, _viewModel.HasAudio && _viewModel.IsAudioEnabled);
+                    SetPlayingState("Loop Playback");
+                    return;
+                }
+
                 SetPausedState();
                 Log("Playback ended.");
             });
@@ -207,6 +229,7 @@ namespace AI_Video_ToolKit.UI
             }
             else
             {
+                _segmentPreviewActive = false;
                 _playback.Resume();
                 if (_playback.IsPlaying)
                     SetPlayingState("▶ Playing");
@@ -215,6 +238,7 @@ namespace AI_Video_ToolKit.UI
 
         private async void Stop_Click(object sender, RoutedEventArgs e)
         {
+            _segmentPreviewActive = false;
             _playback.Stop();
             _playback.SetPosition(TimeSpan.Zero);
             SetStoppedState();
@@ -413,6 +437,17 @@ namespace AI_Video_ToolKit.UI
         }
 
         // ==================== Горячие клавиши ====================
+        private async void Preview_Click(object sender, RoutedEventArgs e)
+        {
+            await PreviewSelectedAsync();
+        }
+
+        private async void MontageList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is MontageItem item)
+                await PreviewMontageItemAsync(item);
+        }
+
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (!IsInsideElement(e.OriginalSource as DependencyObject, Timeline))
@@ -421,58 +456,70 @@ namespace AI_Video_ToolKit.UI
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Space) { TogglePlayPause_Click(sender, e); e.Handled = true; return; }
-            if (e.Key == Key.K || e.Key == Key.S) { Stop_Click(sender, e); e.Handled = true; return; }
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { LoadMultiple_Click(sender, e); e.Handled = true; return; }
-            if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.None) { IncreaseSpeed(); e.Handled = true; return; }
-            if (e.Key == Key.J && Keyboard.Modifiers == ModifierKeys.None) { DecreaseSpeed(); e.Handled = true; return; }
-            if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control) { _viewModel.UndoMarkerCommand.Execute(null); e.Handled = true; return; }
-            if (e.Key == Key.I) { _viewModel.MarkInputCommand.Execute(null); e.Handled = true; return; }
-            if (e.Key == Key.O) { _viewModel.MarkOutputCommand.Execute(null); e.Handled = true; return; }
-            if (e.Key == Key.C) { _viewModel.MarkCutCommand.Execute(null); e.Handled = true; return; }
             if (e.Key == Key.Delete)
             {
-                var selectedMontage = MontageList.SelectedItems.OfType<MontageItem>().ToList();
-                if (selectedMontage.Count > 0 || MontageList.IsKeyboardFocusWithin)
-                {
-                    _viewModel.RemoveMontageItems(selectedMontage);
-                    e.Handled = true;
-                    return;
-                }
-
-                _viewModel.RemoveSelectedFromPlaylistCommand.Execute(null);
-                ScrollSelectedPlaylistItemIntoView();
-                e.Handled = true;
+                HandleDeleteKey(e);
                 return;
             }
-            if (e.Key == Key.R) { e.Handled = true; return; }
-            if (e.Key == Key.A) { e.Handled = true; return; }
-            if (e.Key == Key.V) { e.Handled = true; return; }
-            if (e.Key == Key.M)
+
+            if (!_hotkeys.TryResolve(e, out var action))
+                return;
+
+            ExecuteHotkey(action, e);
+        }
+
+        private async void ExecuteHotkey(InputAction action, KeyEventArgs e)
+        {
+            if (action == InputAction.PlayPause) { TogglePlayPause_Click(this, e); e.Handled = true; return; }
+            if (action == InputAction.Stop) { Stop_Click(this, e); e.Handled = true; return; }
+            if (action == InputAction.LoadFiles) { LoadMultiple_Click(this, e); e.Handled = true; return; }
+            if (action == InputAction.IncreaseSpeed) { IncreaseSpeed(); e.Handled = true; return; }
+            if (action == InputAction.DecreaseSpeed) { DecreaseSpeed(); e.Handled = true; return; }
+            if (action == InputAction.Speed1) { SetSpeed(1); e.Handled = true; return; }
+            if (action == InputAction.Speed2) { SetSpeed(2); e.Handled = true; return; }
+            if (action == InputAction.Speed4) { SetSpeed(4); e.Handled = true; return; }
+            if (action == InputAction.Speed8) { SetSpeed(8); e.Handled = true; return; }
+            if (action == InputAction.NextFile) { _viewModel.Next(); e.Handled = true; return; }
+            if (action == InputAction.PrevFile) { _viewModel.Previous(); e.Handled = true; return; }
+            if (action == InputAction.Preview) { await PreviewSelectedAsync(); e.Handled = true; return; }
+            if (action == InputAction.ToggleAudio) { _viewModel.ToggleAudioCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.ToggleVideo) { _viewModel.ToggleVideoCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.ToggleLoop) { _viewModel.ToggleLoopCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.MarkerIn) { _viewModel.MarkInputCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.MarkerOut) { _viewModel.MarkOutputCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.MarkerCut) { _viewModel.MarkCutCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.UndoMarker) { _viewModel.UndoMarkerCommand.Execute(null); e.Handled = true; return; }
+            if (action == InputAction.Merge)
             {
                 if (_viewModel.MergeMontageCommand.CanExecute(null))
                     _viewModel.MergeMontageCommand.Execute(null);
                 e.Handled = true;
                 return;
             }
-            if (e.Key == Key.Right || e.Key == Key.Left)
+            if (e.Key == Key.Delete)
+            {
+                HandleDeleteKey(e);
+                return;
+            }
+            if (action == InputAction.NextFrame || action == InputAction.PrevFrame)
             {
                 // Window preview keys are raised before TimelineControl gets the event.
                 // Give a selected timeline marker priority; otherwise arrows step playback.
+                var key = action == InputAction.NextFrame ? Key.Right : Key.Left;
                 if (Timeline.TryMoveSelectedMarkerByKey(e.Key, Keyboard.Modifiers))
                 {
                     e.Handled = true;
                     return;
                 }
 
-                if (Timeline.IsPlayheadSelected && Timeline.TryMovePlayheadByKey(e.Key, Keyboard.Modifiers))
+                if (Timeline.IsPlayheadSelected && Timeline.TryMovePlayheadByKey(key, Keyboard.Modifiers))
                 {
                     e.Handled = true;
                     return;
                 }
 
                 var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
-                Step(e.Key == Key.Right ? step : -step);
+                Step(action == InputAction.NextFrame ? step : -step);
                 e.Handled = true;
                 return;
             }
@@ -486,6 +533,69 @@ namespace AI_Video_ToolKit.UI
         private void DecreaseSpeed()
         {
             if (_viewModel.SelectedSpeedIndex > 0) _viewModel.SelectedSpeedIndex--;
+        }
+
+        private void SetSpeed(double speed)
+        {
+            double[] speeds = { 0.1, 0.25, 0.5, 1, 2, 4, 8, 16 };
+            var index = Array.FindIndex(speeds, x => Math.Abs(x - speed) < 0.001);
+            if (index >= 0)
+                _viewModel.SelectedSpeedIndex = index;
+        }
+
+        private void HandleDeleteKey(KeyEventArgs e)
+        {
+            var selectedMontage = MontageList.SelectedItems.OfType<MontageItem>().ToList();
+            if (selectedMontage.Count > 0 || MontageList.IsKeyboardFocusWithin)
+            {
+                _viewModel.RemoveMontageItems(selectedMontage);
+                e.Handled = true;
+                return;
+            }
+
+            _viewModel.RemoveSelectedFromPlaylistCommand.Execute(null);
+            ScrollSelectedPlaylistItemIntoView();
+            e.Handled = true;
+        }
+
+        private async Task PreviewSelectedAsync()
+        {
+            if (_viewModel.SelectedSegment != null && !string.IsNullOrEmpty(_viewModel.CurrentFile))
+            {
+                await StartSelectedSegmentPreviewAsync();
+                return;
+            }
+
+            if (MontageList.SelectedItem is MontageItem montageItem)
+                await PreviewMontageItemAsync(montageItem);
+        }
+
+        private async Task StartSelectedSegmentPreviewAsync()
+        {
+            var segment = _viewModel.SelectedSegment;
+            if (segment == null || string.IsNullOrEmpty(_viewModel.CurrentFile))
+                return;
+
+            await SeekToAsync(segment.Start);
+            _segmentPreviewActive = true;
+            if (_viewModel.PreviewSegmentCommand.CanExecute(null))
+                _viewModel.PreviewSegmentCommand.Execute(null);
+
+            SetPlayingState("Preview Segment");
+            Log($"Preview segment: {segment.StartFrame}-{segment.EndFrame}");
+        }
+
+        private async Task PreviewMontageItemAsync(MontageItem item)
+        {
+            _segmentPreviewActive = false;
+            await LoadAndSync(item.FilePath);
+            if (!_playback.IsPlaying)
+            {
+                _playback.Resume();
+                SetPlayingState("Preview Montage");
+            }
+
+            Log($"Montage preview: {item.FileName}");
         }
 
         private async void Step(int frames)

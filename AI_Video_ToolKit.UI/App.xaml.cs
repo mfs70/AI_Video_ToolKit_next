@@ -3,6 +3,7 @@ using System;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using AI_Video_ToolKit.Infrastructure.Services;
+using AI_Video_ToolKit.UI.Hotkeys;
 using AI_Video_ToolKit.UI.Services;
 using AI_Video_ToolKit.UI.ViewModels;
 using CommunityToolkit.Mvvm.Messaging; //добавил
@@ -29,6 +30,7 @@ namespace AI_Video_ToolKit.UI
 			services.AddTransient<BufferedVideoPlayer>();
 			services.AddTransient<FrameGrabber>();
 			services.AddSingleton<PlaybackService>();
+			services.AddSingleton<HotkeyService>();
 
 			services.AddSingleton<PlayerViewModel>();
 			services.AddSingleton<MainViewModel>();
