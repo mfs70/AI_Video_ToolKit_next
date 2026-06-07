@@ -112,7 +112,10 @@ namespace AI_Video_ToolKit.UI.Services
                 var psi = new ProcessStartInfo
                 {
                     FileName = _processService.FfmpegPath,
-                    Arguments = $"-ss {start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
+                    Arguments = $"-hide_banner " +
+                                $"-loglevel warning " +
+                                $"-hwaccel auto " +
+                                $"-ss {start.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
                                 $"-i \"{file}\" " +
                                 $"-vf scale={_width}:{_height}:force_original_aspect_ratio=decrease," +
                                 $"pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2 " +
